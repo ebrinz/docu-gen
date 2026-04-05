@@ -1,0 +1,12 @@
+title: "Example Documentary"
+voice:
+  model: tts-1-hd
+  voice: echo
+video:
+  resolution: 1080p
+  fps: 60
+drone:
+  cutoff_hz: 400
+  duck_db: -18
+  rt60: 1.5
+  cue_freq: 220
