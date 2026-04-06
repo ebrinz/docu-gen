@@ -18,6 +18,21 @@ def db_to_amp(db: float) -> float:
     return 10.0 ** (db / 20.0)
 
 
+def _resample(data: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+    """Resample audio data from orig_sr to target_sr using linear interpolation."""
+    if orig_sr == target_sr:
+        return data
+    ratio = target_sr / orig_sr
+    new_len = int(len(data) * ratio)
+    indices = np.arange(new_len) / ratio
+    if data.ndim == 1:
+        return np.interp(indices, np.arange(len(data)), data)
+    return np.column_stack([
+        np.interp(indices, np.arange(len(data)), data[:, ch])
+        for ch in range(data.shape[1])
+    ])
+
+
 def _read_wav_float(path: Path) -> tuple[int, np.ndarray]:
     sr, data = wavfile.read(str(path))
     if data.dtype == np.int16:
@@ -26,6 +41,10 @@ def _read_wav_float(path: Path) -> tuple[int, np.ndarray]:
         data = data.astype(np.float64) / 2147483648.0
     elif data.dtype == np.float32:
         data = data.astype(np.float64)
+    # Resample to target SR if needed
+    if sr != SR:
+        data = _resample(data, sr, SR)
+        sr = SR
     return sr, data
 
 

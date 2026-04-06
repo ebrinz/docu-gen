@@ -143,31 +143,21 @@ class {class_name}(Scene):
 
 
 def _banner_outro_script(class_name, doc_title, title, duration, images, images_dir):
-    """Outro scene with banner image and closing tagline."""
-    images_dir_str = str(images_dir).replace("\\", "\\\\")
-    banner = images[0] if images else "banner.png"
+    """Outro scene with closing tagline on dark background."""
     title_esc = title.replace('"', '\\"')
 
     return f'''from manim import *
-from pathlib import Path
 
 config.background_color = "{BG}"
 
 class {class_name}(Scene):
     def construct(self):
-        img_path = Path("{images_dir_str}") / "{banner}"
-        banner = ImageMobject(str(img_path))
-        banner.height = 7.0
-        banner.width = 12.0
-        banner.set_opacity(0.6)
-
         tagline = Text("{title_esc}", color="{GOLD}").scale(0.8)
         tagline.move_to(ORIGIN)
 
-        self.play(FadeIn(banner), run_time=1.5)
         self.play(FadeIn(tagline, shift=UP * 0.3), run_time=1.5)
-        self.wait({max(duration - 5.0, 1.0):.1f})
-        self.play(FadeOut(tagline), FadeOut(banner), run_time=2.0)
+        self.wait({max(duration - 3.5, 1.0):.1f})
+        self.play(FadeOut(tagline), run_time=2.0)
 '''
 
 

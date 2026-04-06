@@ -4,7 +4,26 @@ __pycache__/
 dist/
 build/
 .venv/
-projects/*/build/
+
+# User projects and build outputs
+projects/
+
+# Manim temporary files
 media/
+
+# Generated media
 *.wav
 *.mp4
+
+# macOS
+.DS_Store
+
+# MCP local config
+.mcp.json
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
