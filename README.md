@@ -37,7 +37,7 @@ export OPENAI_API_KEY="sk-..."
 
 Add this to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.) so it persists across sessions.
 
-## Installation
+## Quick Start
 
 ```bash
 git clone https://github.com/ebrinz/docu-gen.git
@@ -45,25 +45,26 @@ cd docu-gen
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+cp example.mcp.json .mcp.json
 ```
 
-This also installs the `docugen` CLI entry point.
+Then open a Claude Code session in the `docu-gen` directory and start prompting. The four `docugen` tools (`plan`, `narrate`, `render`, `stitch`) will be available automatically.
 
-## Connecting to Your AI Client
+## Connecting to Claude Code
 
-docu-gen is an MCP server. You connect it to any MCP-compatible client (Claude Code, Claude Desktop, etc.).
-
-### Claude Code
-
-Add to your project's `.mcp.json` or run:
+An `example.mcp.json` is included in the repo. To activate the MCP server:
 
 ```bash
-claude mcp add docugen -- /path/to/docu-gen/.venv/bin/python -m docugen.server
+cp example.mcp.json .mcp.json
 ```
 
-### Claude Desktop
+That's it. The next time you start a Claude Code session in this directory, the `docugen` tools will be available.
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+> **Note:** `.mcp.json` is gitignored so your local copy won't interfere with the repo.
+
+### Other MCP Clients
+
+For Claude Desktop, add to your config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -76,13 +77,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-### Other MCP Clients
-
-Any client that supports the MCP stdio transport can connect. The server command is:
-
-```bash
-/path/to/docu-gen/.venv/bin/python -m docugen.server
-```
+Any client that supports MCP stdio transport can connect using `.venv/bin/python -m docugen.server`.
 
 ## Usage
 

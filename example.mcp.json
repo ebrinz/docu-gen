@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "docugen": {
+      "type": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["-m", "docugen.server"]
+    }
+  }
+}
