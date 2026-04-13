@@ -579,46 +579,47 @@ ANIM_PRIMITIVES = {
 def build_clip_script(clip: dict, theme_name: str, duration: float,
                       images_dir: str, chapter_num: str = None,
                       chapter_title: str = None) -> str:
-    """Generate a Manim script for a single clip using the theme."""
+    """Generate a Manim script for a single clip using the theme's three-layer system."""
     from docugen.themes import load_theme
     theme = load_theme(theme_name)
 
-    vis_type = clip["visuals"]["type"]
-    assets = clip["visuals"].get("assets", [])
-    direction = clip["visuals"].get("direction", "")
-    clip_id = clip["clip_id"]
+    # Handle legacy flat visuals format — convert to three-layer
+    visuals = clip.get("visuals", {})
+    if "choreography" not in visuals and "theme_elements" not in visuals:
+        # Legacy format: convert type + direction to choreography
+        vis_type = visuals.get("type", "blank")
+        direction = visuals.get("direction", "")
+        assets = visuals.get("assets", [])
 
-    if vis_type == "chapter_card":
-        script = theme.chapter_card(
-            chapter_num or "00", chapter_title or "UNTITLED", duration)
-    elif vis_type == "image_reveal":
-        script = theme.image_reveal(assets, direction, duration, images_dir)
-    elif vis_type == "data_reveal":
-        script = theme.data_reveal(direction, duration)
-    elif vis_type == "animation":
-        # Try to dispatch to a specific animation primitive
-        prim_name, params = _parse_direction(direction)
-        if prim_name and prim_name in ANIM_PRIMITIVES:
-            method = getattr(theme, f"anim_{prim_name}", None)
-            if method:
-                script = method(duration=duration, images_dir=images_dir, **params)
+        clip = dict(clip)  # don't mutate original
+        clip["visuals"] = {
+            "theme_elements": ["hex_grid", "imperial_border", "floating_bg"],
+            "content": {"assets": assets, "placement": "center"},
+            "choreography": {},
+        }
+
+        if vis_type == "chapter_card":
+            clip["visuals"]["choreography"] = {
+                "type": "chapter_card",
+                "params": {"num": chapter_num or "00", "title": chapter_title or "UNTITLED"},
+            }
+            clip["visuals"]["content"]["assets"] = []
+        elif vis_type == "animation" and direction:
+            prim_name, params = _parse_direction(direction)
+            if prim_name and prim_name in ANIM_PRIMITIVES:
+                clip["visuals"]["choreography"] = {"type": prim_name, "params": params}
             else:
-                script = theme.custom_animation(direction, duration, assets, images_dir)
-        else:
-            script = theme.custom_animation(direction, duration, assets, images_dir)
-    else:  # blank
-        script = theme.idle_scene(duration)
+                clip["visuals"]["choreography"] = {}
+        elif vis_type == "image_reveal":
+            pass  # content layer handles assets
+        elif vis_type == "data_reveal" and direction:
+            clip["visuals"]["choreography"] = {
+                "type": "data_text", "params": {"text": direction},
+            }
 
-    # Rename the scene class to match clip_id
-    for scene_name in ["Scene_idle", "Scene_chapter_card", "Scene_image_reveal",
-                       "Scene_data_reveal", "Scene_custom_animation",
-                       "Scene_counter", "Scene_fingerprint_compare",
-                       "Scene_sonar_ring", "Scene_anchor_drop", "Scene_dot_field",
-                       "Scene_remove_reveal", "Scene_dot_merge", "Scene_bar_chart",
-                       "Scene_before_after", "Scene_organism_reveal"]:
-        script = script.replace(f"class {scene_name}", f"class Scene_{clip_id}")
-
-    return script
+    return theme.build_scene(clip, duration, images_dir,
+                             chapter_num=chapter_num or "00",
+                             chapter_title=chapter_title or "")
 
 
 def render_clip(project_path: Path, clip: dict, theme_name: str,

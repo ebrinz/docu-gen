@@ -115,6 +115,17 @@ def split_chapter(chapter: dict, default_exaggeration: float = 0.5) -> list[dict
     # Get chapter-level exaggeration if set
     base_exagg = chapter.get("exaggeration", default_exaggeration)
 
+    # Theme element defaults per chapter type
+    is_intro_outro = cid in ("intro", "outro")
+    is_dark = cid == "ch5_dark"
+    if is_intro_outro:
+        default_elements = ["hex_grid", "imperial_border", "floating_bg",
+                           "dna_helix", "particle_field"]
+    elif is_dark:
+        default_elements = ["floating_bg"]
+    else:
+        default_elements = ["hex_grid", "imperial_border", "floating_bg"]
+
     sentences = _split_sentences(narration) if narration else []
     clips = []
     clip_num = 1
@@ -127,9 +138,9 @@ def split_chapter(chapter: dict, default_exaggeration: float = 0.5) -> list[dict
         "emotion_tag": "neutral",
         "pacing": "normal",
         "visuals": {
-            "type": "chapter_card",
-            "assets": [],
-            "direction": "",
+            "theme_elements": default_elements,
+            "content": {"assets": [], "placement": "center"},
+            "choreography": {"type": "chapter_card", "params": {}},
         },
     })
     clip_num += 1
@@ -163,10 +174,8 @@ def split_chapter(chapter: dict, default_exaggeration: float = 0.5) -> list[dict
         pacing = force_pacing or _assign_pacing(text, prev_clip_text)
 
         clip_assets = []
-        vis_type = "blank"
         if asset_queue:
             clip_assets = [asset_queue.pop(0)]
-            vis_type = "image_reveal"
 
         clips.append({
             "clip_id": f"{cid}_{clip_num:02d}",
@@ -175,9 +184,9 @@ def split_chapter(chapter: dict, default_exaggeration: float = 0.5) -> list[dict
             "emotion_tag": tag,
             "pacing": pacing,
             "visuals": {
-                "type": vis_type,
-                "assets": clip_assets,
-                "direction": "",
+                "theme_elements": default_elements,
+                "content": {"assets": clip_assets, "placement": "center"},
+                "choreography": {},
             },
         })
         prev_clip_text = text
@@ -216,11 +225,11 @@ def split_chapter(chapter: dict, default_exaggeration: float = 0.5) -> list[dict
     # Flush remaining
     _flush_clip()
 
-    # Distribute any remaining assets to blank clips
+    # Distribute any remaining assets to clips without content
     for clip in clips:
-        if clip["visuals"]["type"] == "blank" and asset_queue:
-            clip["visuals"]["assets"] = [asset_queue.pop(0)]
-            clip["visuals"]["type"] = "image_reveal"
+        content = clip["visuals"].get("content", {})
+        if not content.get("assets") and asset_queue:
+            clip["visuals"]["content"]["assets"] = [asset_queue.pop(0)]
 
     return clips
 

@@ -515,129 +515,378 @@ def make_floating_bg(n=80, spread=7.0):
 '''
         )
 
-    def idle_scene(self, duration: float) -> str:
-        return self.manim_header() + f'''
+    # ── Three-Layer Rendering ─────────────────────────────────
 
-class Scene_idle(Scene):
-    def construct(self):
-        grid = make_hex_grid(rows=10, cols=16, radius=0.35)
-        self.add(grid)
-        bg = make_floating_bg()
-        self.add(bg)
-        border = imperial_border()
-        self.play(Create(border), run_time=2.0)
-        alive_wait(self, {max(duration - 2.0, 0.5):.1f}, particles=bg)
-'''
+    def render_theme_layer(self, elements: list[str]) -> str:
+        """Return Manim code for background elements."""
+        lines = []
+        if "hex_grid" in elements:
+            lines.append("        grid = make_hex_grid(rows=10, cols=16, radius=0.35)")
+            lines.append("        self.add(grid)")
+        if "particle_field" in elements:
+            lines.append("        particles = make_particle_field(n=300, color=GLOW)")
+            lines.append("        self.add(particles)")
+        if "dna_helix" in elements:
+            lines.append("        dna_left = make_dna_helix().shift(LEFT * 6).set_opacity(0.3)")
+            lines.append("        dna_right = make_dna_helix().shift(RIGHT * 6).set_opacity(0.3)")
+            lines.append("        self.add(dna_left, dna_right)")
+        if "floating_bg" in elements:
+            lines.append("        bg = make_floating_bg()")
+            lines.append("        self.add(bg)")
+        if "imperial_border" in elements:
+            lines.append("        border = imperial_border()")
+            lines.append("        self.play(Create(border), run_time=1.0)")
+        return "\n".join(lines) if lines else "        pass  # no theme elements"
 
-    def chapter_card(self, num: str, title: str, duration: float) -> str:
-        hold = max(duration - 4.0, 1.0)
-        return self.manim_header() + f'''
+    def render_content_layer(self, assets: list[str], placement: str,
+                             images_dir: str) -> str:
+        """Return Manim code that places content assets."""
+        if not assets:
+            return ""
 
-class Scene_chapter_card(Scene):
-    def construct(self):
-        grid = make_hex_grid(rows=8, cols=14, radius=0.3, opacity=0.08)
-        self.add(grid)
-        border = imperial_border()
-        self.add(border)
-        bg = make_floating_bg()
-        self.add(bg)
+        lines = []
+        for i, asset in enumerate(assets):
+            path = f"{images_dir}/{asset}".replace("\\", "\\\\")
+            var = f"asset_{i}"
 
+            # Position based on placement
+            if placement == "left":
+                pos = "LEFT * 2.5"
+            elif placement == "right":
+                pos = "RIGHT * 2.5"
+            else:
+                pos = "ORIGIN"
+
+            if asset.lower().endswith(".svg"):
+                lines.append(f"        try:")
+                lines.append(f"            {var} = SVGMobject(\"{path}\").scale(2.5)")
+                lines.append(f"            {var}.move_to({pos})")
+                lines.append(f"            self.play(FadeIn({var}), run_time=1.5)")
+                lines.append(f"        except Exception:")
+                lines.append(f"            pass")
+            else:
+                lines.append(f"        try:")
+                lines.append(f"            {var} = ImageMobject(\"{path}\")")
+                lines.append(f"            {var}.height = 4.5")
+                lines.append(f"            {var}.width = min({var}.width * (4.5 / {var}.height), 5.5)")
+                lines.append(f"            {var}.move_to({pos})")
+                lines.append(f"            self.play(FadeIn({var}), run_time=1.5)")
+                lines.append(f"            self.play({var}.animate.scale(1.04), run_time=3.0, rate_func=linear)")
+                lines.append(f"        except Exception:")
+                lines.append(f"            pass")
+
+        return "\n".join(lines)
+
+    def render_choreography(self, choreo_type: str, params: dict,
+                            duration: float, images_dir: str) -> str:
+        """Return Manim code for animation choreography."""
+        if not choreo_type:
+            return ""
+
+        # Dispatch to primitive methods
+        method_map = {
+            "chapter_card": self._choreo_chapter_card,
+            "counter": self._choreo_counter,
+            "fingerprint_compare": self._choreo_fingerprint_compare,
+            "sonar_ring": self._choreo_sonar_ring,
+            "anchor_drop": self._choreo_anchor_drop,
+            "dot_field": self._choreo_dot_field,
+            "remove_reveal": self._choreo_remove_reveal,
+            "dot_merge": self._choreo_dot_merge,
+            "bar_chart": self._choreo_bar_chart,
+            "before_after": self._choreo_before_after,
+            "organism_reveal": self._choreo_organism_reveal,
+            "data_text": self._choreo_data_text,
+        }
+
+        method = method_map.get(choreo_type)
+        if method:
+            return method(params, duration, images_dir)
+        return ""
+
+    # ── Choreography Primitives (return indented code blocks) ──
+
+    def _choreo_chapter_card(self, params, duration, images_dir):
+        num = params.get("num", "00")
+        title = params.get("title", "UNTITLED")
+        return f'''        # Chapter card
         ch_num = Text("{num}", font="Courier", color=SITH_RED, weight=BOLD).scale(1.5)
         ch_title = Text("{title}", font="Courier", color=GLOW, weight=BOLD).scale(0.9)
         ch_title.next_to(ch_num, RIGHT, buff=0.4)
         card = VGroup(ch_num, ch_title).move_to(ORIGIN)
         self.play(FadeIn(card, shift=RIGHT * 0.3), run_time=1.0)
         throb_title(self, ch_title, cycles=2, scale_factor=1.03, cycle_time=1.0)
-        alive_wait(self, {hold:.1f}, particles=bg)
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.0)
-'''
+        alive_wait(self, {max(duration - 4.0, 0.5):.1f}, particles=bg)'''
 
-    def image_reveal(self, assets: list[str], direction: str,
-                     duration: float, images_dir: str) -> str:
-        n = max(len(assets), 1)
-        per_asset = duration / n
-        asset_blocks = ""
-        for asset in assets:
-            # Use os.path.join at Manim runtime to handle paths robustly
-            asset_path = asset.replace("\\", "/")
-            asset_blocks += f'''
-        # Asset: {asset_path}
-        try:
-            if "{asset_path}".lower().endswith(".svg"):
-                img = SVGMobject("{asset_path}").scale(2.5)
+    def _choreo_counter(self, params, duration, images_dir):
+        to_val = params.get("to", 0)
+        color = str(params.get("color", "gold")).upper()
+        label = params.get("label", "")
+        label_line = ""
+        if label:
+            label_line = f'''
+        lbl = Text("{label}", font="Courier", color=TEXT_DIM).scale(0.4)
+        lbl.next_to(num, DOWN, buff=0.3)
+        self.play(FadeIn(lbl), run_time=0.5)'''
+        return f'''        # Counter -> {to_val}
+        num = Text("{to_val}", font="Courier", color={color}, weight=BOLD).scale(1.8)
+        num.set_opacity(0)
+        self.play(num.animate.set_opacity(1.0), run_time=1.0)
+        throb_title(self, num, cycles=2, scale_factor=1.06, cycle_time=1.0){label_line}
+        alive_wait(self, {max(duration - 4.0, 0.5):.1f}, particles=bg)'''
+
+    def _choreo_fingerprint_compare(self, params, duration, images_dir):
+        mol1 = params.get("mol1", "A")
+        mol2 = params.get("mol2", "B")
+        score = float(params.get("score", 0))
+        return f'''        # Fingerprint: {mol1} vs {mol2}
+        l_label = Text("{mol1}", font="Courier", color=GOLD, weight=BOLD).scale(0.5)
+        r_label = Text("{mol2}", font="Courier", color=CYAN, weight=BOLD).scale(0.5)
+        l_label.move_to(LEFT * 3.5 + UP * 2.5)
+        r_label.move_to(RIGHT * 3.5 + UP * 2.5)
+        self.play(FadeIn(l_label), FadeIn(r_label), run_time=0.8)
+        l_ring = VGroup()
+        r_ring = VGroup()
+        for i in range(48):
+            angle = i / 48 * TAU
+            pos_l = LEFT * 3.5 + np.array([1.8*np.cos(angle), 1.8*np.sin(angle), 0])
+            pos_r = RIGHT * 3.5 + np.array([1.8*np.cos(angle), 1.8*np.sin(angle), 0])
+            match = np.random.random() < {score}
+            col = GOLD if match else GRID_COL
+            l_ring.add(Square(side_length=0.12, color=col, fill_opacity=0.8 if match else 0.2).move_to(pos_l))
+            r_ring.add(Square(side_length=0.12, color=col, fill_opacity=0.8 if match else 0.2).move_to(pos_r))
+        self.play(FadeIn(l_ring, lag_ratio=0.02), FadeIn(r_ring, lag_ratio=0.02), run_time=2.0)
+        score_text = Text("Tanimoto: {score:.2f}", font="Courier", color=GLOW, weight=BOLD).scale(0.6)
+        score_text.move_to(DOWN * 1.5)
+        self.play(FadeIn(score_text, scale=1.3), run_time=1.0)
+        alive_wait(self, {max(duration - 6.0, 1.0):.1f}, particles=bg)'''
+
+    def _choreo_sonar_ring(self, params, duration, images_dir):
+        center = params.get("center", "Anchor")
+        high = int(params.get("high", 0))
+        med = int(params.get("med", 0))
+        low = int(params.get("low", 0))
+        return f'''        # Sonar ring: {center}
+        field = VGroup()
+        for _ in range(200):
+            x, y = np.random.uniform(-5.5, 5.5), np.random.uniform(-3, 3)
+            field.add(Dot([x,y,0], radius=0.025, color=TEXT_DIM).set_opacity(0.12))
+        self.add(field)
+        anchor = Dot(ORIGIN, radius=0.15, color=GOLD).set_opacity(0.9)
+        anchor_label = Text("{center}", font="Courier", color=GOLD, weight=BOLD).scale(0.35)
+        anchor_label.next_to(anchor, DOWN, buff=0.2)
+        self.play(FadeIn(anchor, scale=2.0), FadeIn(anchor_label), run_time=1.0)
+        ring = Circle(radius=0.2, color=GOLD, stroke_width=2, stroke_opacity=0.8)
+        self.play(ring.animate.scale(30).set_opacity(0), run_time=3.0, rate_func=linear)
+        self.remove(ring)
+        tiers = VGroup(
+            Text("HIGH: {high}", font="Courier", color=GOLD, weight=BOLD).scale(0.4),
+            Text("MED:  {med}", font="Courier", color=CYAN).scale(0.4),
+            Text("LOW:  {low}", font="Courier", color=PURPLE).scale(0.4),
+        ).arrange(DOWN, buff=0.2, aligned_edge=LEFT).to_corner(DR, buff=0.8)
+        self.play(FadeIn(tiers, lag_ratio=0.3), run_time=1.5)
+        alive_wait(self, {max(duration - 7.0, 1.0):.1f}, particles=bg)'''
+
+    def _choreo_anchor_drop(self, params, duration, images_dir):
+        name = params.get("name", "Compound")
+        count = int(params.get("count", 0))
+        color = str(params.get("color", "gold")).upper()
+        return f'''        # Anchor drop: {name} +{count}
+        field = VGroup()
+        for _ in range(250):
+            x, y = np.random.uniform(-5.5, 5.5), np.random.uniform(-3, 3)
+            field.add(Dot([x,y,0], radius=0.02, color=TEXT_DIM).set_opacity(0.1))
+        self.add(field)
+        flash = Dot(ORIGIN, radius=0.2, color={color}).set_opacity(0.9)
+        label = Text("{name}", font="Courier", color={color}, weight=BOLD).scale(0.45)
+        label.next_to(flash, DOWN, buff=0.3)
+        self.play(FadeIn(flash, scale=3.0), FadeIn(label), run_time=0.8)
+        ring = Circle(radius=0.2, color={color}, stroke_width=2)
+        self.play(ring.animate.scale(25).set_opacity(0), run_time=2.0, rate_func=linear)
+        self.remove(ring)
+        counter = Text("+{count}", font="Courier", color={color}, weight=BOLD).scale(0.7)
+        counter.next_to(label, DOWN, buff=0.3)
+        self.play(FadeIn(counter, scale=1.5), run_time=0.8)
+        throb_title(self, counter, cycles=2, scale_factor=1.05, cycle_time=0.8)
+        alive_wait(self, {max(duration - 6.0, 1.0):.1f}, particles=bg)'''
+
+    def _choreo_dot_field(self, params, duration, images_dir):
+        total = int(params.get("total", 64659))
+        lit_pct = int(params.get("lit_pct", 31))
+        label = params.get("label", "")
+        n_dots = min(total // 100, 500)
+        n_lit = int(n_dots * lit_pct / 100)
+        label_code = ""
+        if label:
+            label_code = f'''
+        lbl = Text("{label}", font="Courier", color=GLOW).scale(0.45)
+        lbl.to_edge(DOWN, buff=0.8)
+        self.play(FadeIn(lbl, shift=UP * 0.2), run_time=1.0)'''
+        return f'''        # Dot field: {lit_pct}% of {total}
+        field = VGroup()
+        colors = [GOLD, CYAN, PURPLE]
+        for i in range({n_dots}):
+            x, y = np.random.uniform(-6, 6), np.random.uniform(-3.5, 3.5)
+            if i < {n_lit}:
+                col = colors[i % 3]
+                op = np.random.uniform(0.3, 0.7)
             else:
-                img = ImageMobject("{asset_path}").scale_to_fit_width(10)
-            img.set_opacity(0)
-            self.add(img)
-            self.play(img.animate.set_opacity(1.0).scale(1.04),
-                      run_time=min(2.0, {per_asset:.1f} * 0.4), rate_func=smooth)
-            alive_wait(self, {max(per_asset - 3.0, 0.5):.1f}, particles=bg)
-            self.play(FadeOut(img), run_time=min(1.0, {per_asset:.1f} * 0.2))
+                col = TEXT_DIM
+                op = np.random.uniform(0.05, 0.12)
+            field.add(Dot([x,y,0], radius=0.025, color=col).set_opacity(op))
+        self.play(FadeIn(field, lag_ratio=0.003), run_time=2.0){label_code}
+        alive_wait(self, {max(duration - 4.0, 1.0):.1f}, particles=bg)'''
+
+    def _choreo_remove_reveal(self, params, duration, images_dir):
+        removed = params.get("removed", "A")
+        emerged = params.get("emerged", "B")
+        via = params.get("via", "C")
+        effect = params.get("effect", "")
+        beat = min(duration * 0.12, 2.0)
+        effect_code = ""
+        if effect:
+            effect_code = f'''
+        eff = Text("{effect}", font="Courier", color=GOLD, weight=BOLD).scale(0.6)
+        eff.next_to(via_text, DOWN, buff=0.3)
+        self.play(FadeIn(eff, scale=1.3), run_time=0.8)
+        throb_title(self, eff, cycles=1, scale_factor=1.05)'''
+        return f'''        # Remove-reveal: {removed} -> {emerged}
+        dot1 = Dot(LEFT * 2, radius=0.2, color=GOLD).set_opacity(0.9)
+        dot1_label = Text("{removed}", font="Courier", color=GOLD, weight=BOLD).scale(0.4)
+        dot1_label.next_to(dot1, DOWN, buff=0.2)
+        self.play(FadeIn(dot1, scale=2.0), FadeIn(dot1_label), run_time=1.0)
+        alive_wait(self, {beat:.1f}, particles=bg)
+        cross = Cross(stroke_color=SITH_RED, stroke_width=6).scale(0.3).move_to(dot1)
+        removed_text = Text("REMOVED", font="Courier", color=SITH_RED, weight=BOLD).scale(0.4)
+        removed_text.next_to(dot1, UP, buff=0.4)
+        self.play(Create(cross), dot1.animate.set_opacity(0.15), FadeIn(removed_text, scale=1.3), run_time=0.8)
+        alive_wait(self, {beat:.1f}, particles=bg)
+        self.play(FadeOut(cross), FadeOut(removed_text), FadeOut(dot1), FadeOut(dot1_label), run_time=0.5)
+        alive_wait(self, {beat:.1f}, particles=bg)
+        dot2 = Dot(RIGHT * 2, radius=0.2, color=GLOW).set_opacity(0.9)
+        dot2_label = Text("{emerged}", font="Courier", color=GLOW, weight=BOLD).scale(0.45)
+        dot2_label.next_to(dot2, DOWN, buff=0.2)
+        self.play(FadeIn(dot2, scale=3.0), FadeIn(dot2_label), run_time=1.0)
+        via_text = Text("via {via}", font="Courier", color=PURPLE).scale(0.3)
+        via_text.next_to(dot2_label, DOWN, buff=0.15)
+        self.play(FadeIn(via_text), run_time=0.5){effect_code}
+        alive_wait(self, {max(duration - 9.0, 1.0):.1f}, particles=bg)'''
+
+    def _choreo_dot_merge(self, params, duration, images_dir):
+        d1 = params.get("dot1", "A")
+        d2 = params.get("dot2", "B")
+        pathways = params.get("pathways", [])
+        if isinstance(pathways, str): pathways = [pathways]
+        pw = " + ".join(pathways) if pathways else ""
+        result = params.get("result", "")
+        pw_code = ""
+        if pw:
+            pw_code = f'''
+        pw = Text("{pw}", font="Courier", color=CYAN).scale(0.3)
+        pw.move_to(UP * 2)
+        self.play(FadeIn(pw), run_time=0.5)'''
+        result_code = ""
+        if result:
+            result_code = f'''
+        res = Text("{result}", font="Courier", color=GLOW, weight=BOLD).scale(0.8)
+        res.move_to(UP * 0.5)
+        self.play(FadeIn(res, scale=1.3), run_time=0.8)
+        throb_title(self, res, cycles=2, scale_factor=1.05, cycle_time=0.8)'''
+        return f'''        # Dot merge: {d1} + {d2}
+        d1 = Dot(LEFT * 4, radius=0.15, color=PURPLE)
+        d2 = Dot(RIGHT * 4, radius=0.15, color=GOLD)
+        l1 = Text("{d1}", font="Courier", color=PURPLE, weight=BOLD).scale(0.3)
+        l2 = Text("{d2}", font="Courier", color=GOLD, weight=BOLD).scale(0.3)
+        l1.next_to(d1, DOWN, buff=0.2)
+        l2.next_to(d2, DOWN, buff=0.2)
+        self.play(FadeIn(d1), FadeIn(d2), FadeIn(l1), FadeIn(l2), run_time=1.0){pw_code}
+        self.play(d1.animate.move_to(LEFT * 0.3), d2.animate.move_to(RIGHT * 0.3),
+                  l1.animate.move_to(DOWN * 1.5 + LEFT * 2),
+                  l2.animate.move_to(DOWN * 1.5 + RIGHT * 2), run_time=2.0)
+        flash = Dot(ORIGIN, radius=0.3, color=GLOW).set_opacity(0.8)
+        self.play(FadeIn(flash, scale=3.0), run_time=0.5){result_code}
+        alive_wait(self, {max(duration - 7.0, 1.0):.1f}, particles=bg)'''
+
+    def _choreo_bar_chart(self, params, duration, images_dir):
+        items = params.get("items", [])
+        if isinstance(items, str): items = [items]
+        bar_time = max(duration - 2.0, 1.0) / max(len(items), 1)
+        code = "        # Bar chart\n"
+        for i, item in enumerate(items):
+            parts = item.split(":")
+            label = parts[0] if len(parts) > 0 else f"Item {i}"
+            value = parts[1] if len(parts) > 1 else "0"
+            color = parts[2].upper() if len(parts) > 2 else "GLOW"
+            y = 2.0 - i * 1.0
+            bw = min(float(value) / 25000 * 8, 8.0) if value.replace(",","").isdigit() else 4.0
+            code += f'''        bar_{i} = Rectangle(width={bw:.1f}, height=0.5, color={color}, fill_color={color}, fill_opacity=0.3, stroke_width=2)
+        bar_{i}.move_to(LEFT * {(8-bw)/2:.1f} + UP * {y:.1f})
+        bar_{i}_l = Text("{label}", font="Courier", color={color}, weight=BOLD).scale(0.3)
+        bar_{i}_l.next_to(bar_{i}, LEFT, buff=0.3)
+        bar_{i}_v = Text("{value}", font="Courier", color={color}).scale(0.35)
+        bar_{i}_v.next_to(bar_{i}, RIGHT, buff=0.2)
+        self.play(GrowFromEdge(bar_{i}, LEFT), FadeIn(bar_{i}_l), FadeIn(bar_{i}_v), run_time={bar_time:.1f})
+'''
+        code += f"        alive_wait(self, 1.0, particles=bg)"
+        return code
+
+    def _choreo_before_after(self, params, duration, images_dir):
+        label = params.get("label", "Metric")
+        before = params.get("before", "0")
+        after = params.get("after", "0")
+        color = str(params.get("color", "gold")).upper()
+        return f'''        # Before/After: {label}
+        header = Text("{label}", font="Courier", color=TEXT_COL, weight=BOLD).scale(0.5)
+        header.move_to(UP * 2.5)
+        self.play(FadeIn(header), run_time=0.5)
+        before_lbl = Text("BEFORE", font="Courier", color=TEXT_DIM).scale(0.35)
+        before_lbl.move_to(LEFT * 3 + UP * 1.2)
+        before_val = Text("{before}", font="Courier", color=TEXT_DIM, weight=BOLD).scale(0.8)
+        before_val.move_to(LEFT * 3)
+        self.play(FadeIn(before_lbl), FadeIn(before_val), run_time=1.0)
+        alive_wait(self, {duration * 0.2:.1f}, particles=bg)
+        arrow = Arrow(LEFT * 1, RIGHT * 1, color=GLOW, stroke_width=3)
+        self.play(GrowArrow(arrow), run_time=0.8)
+        after_lbl = Text("AFTER", font="Courier", color={color}).scale(0.35)
+        after_lbl.move_to(RIGHT * 3 + UP * 1.2)
+        after_val = Text("{after}", font="Courier", color={color}, weight=BOLD).scale(0.8)
+        after_val.move_to(RIGHT * 3)
+        self.play(FadeIn(after_lbl), FadeIn(after_val, scale=1.3), run_time=1.0)
+        throb_title(self, after_val, cycles=1, scale_factor=1.05)
+        alive_wait(self, {max(duration - 6.0, 1.0):.1f}, particles=bg)'''
+
+    def _choreo_organism_reveal(self, params, duration, images_dir):
+        image = params.get("image", "")
+        name = params.get("name", "Organism")
+        compound = params.get("compound", "Compound")
+        note = params.get("note", "")
+        img_path = f"{images_dir}/{image}" if image else ""
+        hold = max(duration - 5.0, 2.0)
+        return f'''        # Organism: {name}
+        try:
+            img = ImageMobject("{img_path}")
+            img.height = 4.5
+            img.width = min(img.width * (4.5 / img.height), 5.5)
+            img.move_to(LEFT * 2.5)
+            self.play(FadeIn(img), run_time=1.5)
+            self.play(img.animate.scale(1.04), run_time={hold:.1f}, rate_func=linear)
         except Exception:
-            alive_wait(self, {per_asset:.1f}, particles=bg)
-'''
-        return self.manim_header() + f'''
+            alive_wait(self, {hold:.1f}, particles=bg)
+        info = VGroup(
+            Text("{name}", font="Courier", color=CYAN, weight=BOLD).scale(0.4),
+            Text("{compound}", font="Courier", color=GOLD).scale(0.45),
+            Text("{note}", font="Courier", color=TEXT_DIM).scale(0.3),
+        ).arrange(DOWN, buff=0.15, aligned_edge=LEFT).move_to(RIGHT * 3)
+        self.play(FadeIn(info, lag_ratio=0.3), run_time=1.5)'''
 
-class Scene_image_reveal(Scene):
-    def construct(self):
-        grid = make_hex_grid(rows=8, cols=14, radius=0.3, opacity=0.08)
-        self.add(grid)
-        border = imperial_border()
-        self.add(border)
-        bg = make_floating_bg()
-        self.add(bg)
-        # Direction: {direction}
-{asset_blocks}
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.0)
-'''
+    def _choreo_data_text(self, params, duration, images_dir):
+        text = params.get("text", "")
+        return f'''        # Data text
+        txt = Text("{text}", font="Courier", color=GLOW).scale(0.5)
+        self.play(FadeIn(txt, shift=UP * 0.2), run_time=1.0)
+        alive_wait(self, {max(duration - 2.0, 0.5):.1f}, particles=bg)'''
 
-    def data_reveal(self, direction: str, duration: float) -> str:
-        hold = max(duration - 4.0, 1.0)
-        # Escape any braces in the direction string so they don't confuse Manim
-        safe_direction = direction.replace('"', '\\"')
-        return self.manim_header() + f'''
-
-class Scene_data_reveal(Scene):
-    def construct(self):
-        grid = make_hex_grid(rows=8, cols=14, radius=0.3, opacity=0.08)
-        self.add(grid)
-        border = imperial_border()
-        self.add(border)
-        bg = make_floating_bg()
-        self.add(bg)
-
-        label = Text("{safe_direction}", font="Courier", color=GLOW, weight=BOLD)
-        label.scale(0.55).move_to(ORIGIN)
-        label.set_opacity(0)
-        self.play(label.animate.set_opacity(1.0), run_time=1.5, rate_func=smooth)
-        throb_title(self, label, cycles=2, scale_factor=1.03, cycle_time=1.0)
-        alive_wait(self, {hold:.1f}, particles=bg)
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.0)
-'''
-
-    def custom_animation(self, direction: str, duration: float,
-                         assets: list[str], images_dir: str) -> str:
-        hold = max(duration - 4.0, 1.0)
-        safe_direction = direction.replace('"', '\\"')
-        return self.manim_header() + f'''
-
-class Scene_custom_animation(Scene):
-    def construct(self):
-        grid = make_hex_grid(rows=8, cols=14, radius=0.3, opacity=0.08)
-        self.add(grid)
-        border = imperial_border()
-        self.add(border)
-        bg = make_floating_bg()
-        self.add(bg)
-
-        # Choreography: {safe_direction}
-        label = Text("{safe_direction[:60]}...", font="Courier", color=TEXT_COL)
-        label.scale(0.4).to_edge(DOWN, buff=0.5)
-        self.play(FadeIn(label), run_time=0.5)
-        scanline(self, duration=2.0, color=PURPLE)
-        alive_wait(self, {hold:.1f}, particles=bg)
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.0)
-'''
+    # Legacy idle_scene override removed — base class build_scene handles it
 
     def transition_sounds(self) -> dict[str, callable]:
         return {
@@ -665,372 +914,6 @@ class Scene_custom_animation(Scene):
             "ch9_future": _layer_ch9,
             "outro": _layer_outro,
         }
-
-    # ── Animation Primitives ─────────────────────────────────────
-
-    def _scene_wrapper(self, class_name, body, duration):
-        """Wrap a Manim construct body in a themed scene with background."""
-        return self.manim_header() + f'''
-
-class {class_name}(Scene):
-    def construct(self):
-        grid = make_hex_grid(rows=8, cols=14, radius=0.3, opacity=0.08)
-        self.add(grid)
-        bg = make_floating_bg()
-        self.add(bg)
-        border = imperial_border()
-        self.add(border)
-
-{body}
-
-        alive_wait(self, {max(duration * 0.1, 0.5):.1f}, particles=bg)
-'''
-
-    def anim_counter(self, duration, images_dir="", **kw):
-        from_val = kw.get("from", 0)
-        to_val = kw.get("to", 0)
-        color = kw.get("color", "gold").upper()
-        label = kw.get("label", "")
-        tick_time = min(duration * 0.5, 4.0)
-        hold_time = max(duration - tick_time - 2.0, 0.5)
-        label_line = ""
-        if label:
-            label_line = f'''
-        lbl = Text("{label}", font="Courier", color=TEXT_DIM).scale(0.4)
-        lbl.next_to(num, DOWN, buff=0.3)
-        self.play(FadeIn(lbl), run_time=0.5)'''
-
-        body = f'''
-        # Counter: {from_val} -> {to_val}
-        num = Text("{to_val}", font="Courier", color={color}, weight=BOLD).scale(1.8)
-        num.set_opacity(0)
-        self.play(num.animate.set_opacity(1.0), run_time=1.0)
-        throb_title(self, num, cycles=2, scale_factor=1.06, cycle_time={tick_time/2:.1f}){label_line}
-        alive_wait(self, {hold_time:.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_counter", body, duration)
-
-    def anim_fingerprint_compare(self, duration, images_dir="", **kw):
-        mol1 = kw.get("mol1", "Molecule A")
-        mol2 = kw.get("mol2", "Molecule B")
-        score = kw.get("score", 0.0)
-        if isinstance(score, str):
-            score = float(score)
-        hold = max(duration - 8.0, 1.0)
-        body = f'''
-        # Fingerprint comparison: {mol1} vs {mol2}
-        l_label = Text("{mol1}", font="Courier", color=GOLD, weight=BOLD).scale(0.5)
-        r_label = Text("{mol2}", font="Courier", color=CYAN, weight=BOLD).scale(0.5)
-        l_label.move_to(LEFT * 3.5 + UP * 2.5)
-        r_label.move_to(RIGHT * 3.5 + UP * 2.5)
-        self.play(FadeIn(l_label), FadeIn(r_label), run_time=0.8)
-
-        # Fingerprint rings
-        l_ring = VGroup()
-        r_ring = VGroup()
-        for i in range(48):
-            angle = i / 48 * TAU
-            r_val = 1.8
-            pos_l = LEFT * 3.5 + np.array([r_val * np.cos(angle), r_val * np.sin(angle), 0])
-            pos_r = RIGHT * 3.5 + np.array([r_val * np.cos(angle), r_val * np.sin(angle), 0])
-            match = np.random.random() < {score}
-            col_l = GOLD if match else GRID_COL
-            col_r = GOLD if match else GRID_COL
-            l_ring.add(Square(side_length=0.12, color=col_l, fill_opacity=0.8 if match else 0.2).move_to(pos_l))
-            r_ring.add(Square(side_length=0.12, color=col_r, fill_opacity=0.8 if match else 0.2).move_to(pos_r))
-        self.play(FadeIn(l_ring, lag_ratio=0.02), FadeIn(r_ring, lag_ratio=0.02), run_time=2.0)
-
-        # Tanimoto score
-        score_text = Text("Tanimoto: {score:.2f}", font="Courier", color=GLOW, weight=BOLD).scale(0.6)
-        score_text.move_to(DOWN * 1.5)
-        self.play(FadeIn(score_text, scale=1.3), run_time=1.0)
-        throb_title(self, score_text, cycles=1, scale_factor=1.04)
-        alive_wait(self, {hold:.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_fingerprint_compare", body, duration)
-
-    def anim_sonar_ring(self, duration, images_dir="", **kw):
-        center = kw.get("center", "Anchor")
-        high = int(kw.get("high", 0))
-        med = int(kw.get("med", 0))
-        low = int(kw.get("low", 0))
-        body = f'''
-        # Sonar ring from {center}
-        # Scatter dots
-        field = VGroup()
-        for _ in range(200):
-            x, y = np.random.uniform(-5.5, 5.5), np.random.uniform(-3, 3)
-            field.add(Dot([x,y,0], radius=0.025, color=TEXT_DIM).set_opacity(0.12))
-        self.add(field)
-
-        # Center anchor
-        anchor = Dot(ORIGIN, radius=0.15, color=GOLD).set_opacity(0.9)
-        anchor_label = Text("{center}", font="Courier", color=GOLD, weight=BOLD).scale(0.35)
-        anchor_label.next_to(anchor, DOWN, buff=0.2)
-        self.play(FadeIn(anchor, scale=2.0), FadeIn(anchor_label), run_time=1.0)
-
-        # Expanding ring
-        ring = Circle(radius=0.2, color=GOLD, stroke_width=2, stroke_opacity=0.8)
-        self.play(ring.animate.scale(30).set_opacity(0), run_time=3.0, rate_func=linear)
-        self.remove(ring)
-
-        # Tier labels
-        tiers = VGroup(
-            Text("HIGH: {high}", font="Courier", color=GOLD, weight=BOLD).scale(0.4),
-            Text("MED:  {med}", font="Courier", color=CYAN).scale(0.4),
-            Text("LOW:  {low}", font="Courier", color=PURPLE).scale(0.4),
-        ).arrange(DOWN, buff=0.2, aligned_edge=LEFT).to_corner(DR, buff=0.8)
-        self.play(FadeIn(tiers, lag_ratio=0.3), run_time=1.5)
-        alive_wait(self, {max(duration - 7.0, 1.0):.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_sonar_ring", body, duration)
-
-    def anim_anchor_drop(self, duration, images_dir="", **kw):
-        name = kw.get("name", "Compound")
-        count = int(kw.get("count", 0))
-        color = kw.get("color", "gold").upper()
-        body = f'''
-        # Anchor drop: {name} -> {count}
-        # Dark field
-        field = VGroup()
-        for _ in range(250):
-            x, y = np.random.uniform(-5.5, 5.5), np.random.uniform(-3, 3)
-            field.add(Dot([x,y,0], radius=0.02, color=TEXT_DIM).set_opacity(0.1))
-        self.add(field)
-        alive_wait(self, 1.0, particles=bg)
-
-        # Flash
-        flash = Dot(ORIGIN, radius=0.2, color={color}).set_opacity(0.9)
-        label = Text("{name}", font="Courier", color={color}, weight=BOLD).scale(0.45)
-        label.next_to(flash, DOWN, buff=0.3)
-        self.play(FadeIn(flash, scale=3.0), FadeIn(label), run_time=0.8)
-
-        # Sonar ring
-        ring = Circle(radius=0.2, color={color}, stroke_width=2)
-        self.play(ring.animate.scale(25).set_opacity(0),
-                  run_time=2.0, rate_func=linear)
-        self.remove(ring)
-
-        # Counter
-        counter = Text("+{count}", font="Courier", color={color}, weight=BOLD).scale(0.7)
-        counter.next_to(label, DOWN, buff=0.3)
-        self.play(FadeIn(counter, scale=1.5), run_time=0.8)
-        throb_title(self, counter, cycles=2, scale_factor=1.05, cycle_time=0.8)
-        alive_wait(self, {max(duration - 7.0, 1.0):.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_anchor_drop", body, duration)
-
-    def anim_dot_field(self, duration, images_dir="", **kw):
-        total = int(kw.get("total", 64659))
-        lit_pct = int(kw.get("lit_pct", 31))
-        label = kw.get("label", "")
-        n_dots = min(total // 100, 500)
-        n_lit = int(n_dots * lit_pct / 100)
-        body = f'''
-        # Dot field: {lit_pct}% of {total} illuminated
-        field = VGroup()
-        colors = [GOLD, CYAN, PURPLE]
-        for i in range({n_dots}):
-            x, y = np.random.uniform(-6, 6), np.random.uniform(-3.5, 3.5)
-            if i < {n_lit}:
-                col = colors[i % 3]
-                op = np.random.uniform(0.3, 0.7)
-            else:
-                col = TEXT_DIM
-                op = np.random.uniform(0.05, 0.12)
-            field.add(Dot([x,y,0], radius=0.025, color=col).set_opacity(op))
-        self.play(FadeIn(field, lag_ratio=0.003), run_time=2.0)
-
-        if "{label}":
-            lbl = Text("{label}", font="Courier", color=GLOW).scale(0.45)
-            lbl.to_edge(DOWN, buff=0.8)
-            self.play(FadeIn(lbl, shift=UP * 0.2), run_time=1.0)
-
-        alive_wait(self, {max(duration - 4.0, 1.0):.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_dot_field", body, duration)
-
-    def anim_remove_reveal(self, duration, images_dir="", **kw):
-        removed = kw.get("removed", "Compound A")
-        emerged = kw.get("emerged", "Compound B")
-        via = kw.get("via", "Anchor")
-        effect = kw.get("effect", "")
-        beat = min(duration * 0.15, 2.5)
-        body = f'''
-        # Remove-reveal: {removed} -> {emerged}
-        # Original dot
-        dot1 = Dot(LEFT * 2, radius=0.2, color=GOLD).set_opacity(0.9)
-        dot1_label = Text("{removed}", font="Courier", color=GOLD, weight=BOLD).scale(0.4)
-        dot1_label.next_to(dot1, DOWN, buff=0.2)
-        self.play(FadeIn(dot1, scale=2.0), FadeIn(dot1_label), run_time=1.0)
-        alive_wait(self, {beat:.1f}, particles=bg)
-
-        # Remove with red cross
-        cross = Cross(stroke_color=SITH_RED, stroke_width=6).scale(0.3).move_to(dot1)
-        removed_text = Text("REMOVED", font="Courier", color=SITH_RED, weight=BOLD).scale(0.4)
-        removed_text.next_to(dot1, UP, buff=0.4)
-        self.play(Create(cross), dot1.animate.set_opacity(0.15),
-                  FadeIn(removed_text, scale=1.3), run_time=0.8)
-        alive_wait(self, {beat:.1f}, particles=bg)
-
-        # Clear
-        self.play(FadeOut(cross), FadeOut(removed_text), FadeOut(dot1),
-                  FadeOut(dot1_label), run_time=0.5)
-        alive_wait(self, {beat:.1f}, particles=bg)
-
-        # New dot emerges
-        dot2 = Dot(RIGHT * 2, radius=0.2, color=GLOW).set_opacity(0.9)
-        dot2_label = Text("{emerged}", font="Courier", color=GLOW, weight=BOLD).scale(0.45)
-        dot2_label.next_to(dot2, DOWN, buff=0.2)
-        self.play(FadeIn(dot2, scale=3.0), FadeIn(dot2_label), run_time=1.0)
-
-        # Via link
-        via_text = Text("via {via}", font="Courier", color=PURPLE).scale(0.3)
-        via_text.next_to(dot2_label, DOWN, buff=0.15)
-        self.play(FadeIn(via_text), run_time=0.5)
-
-        # Effect
-        if "{effect}":
-            eff = Text("{effect}", font="Courier", color=GOLD, weight=BOLD).scale(0.6)
-            eff.next_to(via_text, DOWN, buff=0.3)
-            self.play(FadeIn(eff, scale=1.3), run_time=0.8)
-            throb_title(self, eff, cycles=1, scale_factor=1.05)
-
-        alive_wait(self, {max(duration - 10.0, 1.0):.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_remove_reveal", body, duration)
-
-    def anim_dot_merge(self, duration, images_dir="", **kw):
-        dot1 = kw.get("dot1", "Compound A")
-        dot2 = kw.get("dot2", "Compound B")
-        pathways = kw.get("pathways", [])
-        if isinstance(pathways, str):
-            pathways = [pathways]
-        result = kw.get("result", "")
-        pw_text = " + ".join(pathways) if pathways else ""
-        body = f'''
-        # Dot merge: {dot1} + {dot2}
-        d1 = Dot(LEFT * 4, radius=0.15, color=PURPLE)
-        d2 = Dot(RIGHT * 4, radius=0.15, color=GOLD)
-        l1 = Text("{dot1}", font="Courier", color=PURPLE, weight=BOLD).scale(0.3)
-        l2 = Text("{dot2}", font="Courier", color=GOLD, weight=BOLD).scale(0.3)
-        l1.next_to(d1, DOWN, buff=0.2)
-        l2.next_to(d2, DOWN, buff=0.2)
-        self.play(FadeIn(d1), FadeIn(d2), FadeIn(l1), FadeIn(l2), run_time=1.0)
-
-        # Pathway labels
-        if "{pw_text}":
-            pw = Text("{pw_text}", font="Courier", color=CYAN).scale(0.3)
-            pw.move_to(UP * 2)
-            self.play(FadeIn(pw), run_time=0.5)
-
-        # Approach
-        self.play(d1.animate.move_to(LEFT * 0.3), d2.animate.move_to(RIGHT * 0.3),
-                  l1.animate.move_to(DOWN * 1.5 + LEFT * 2),
-                  l2.animate.move_to(DOWN * 1.5 + RIGHT * 2),
-                  run_time=2.0)
-
-        # Merge flash
-        flash = Dot(ORIGIN, radius=0.3, color=GLOW).set_opacity(0.8)
-        self.play(FadeIn(flash, scale=3.0), run_time=0.5)
-
-        # Result
-        if "{result}":
-            res = Text("{result}", font="Courier", color=GLOW, weight=BOLD).scale(0.8)
-            res.move_to(UP * 0.5)
-            self.play(FadeIn(res, scale=1.3), run_time=0.8)
-            throb_title(self, res, cycles=2, scale_factor=1.05, cycle_time=0.8)
-
-        alive_wait(self, {max(duration - 8.0, 1.0):.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_dot_merge", body, duration)
-
-    def anim_bar_chart(self, duration, images_dir="", **kw):
-        items = kw.get("items", [])
-        if isinstance(items, str):
-            items = [items]
-        # Parse items: "Label:Value:color"
-        bar_time = max(duration - 2.0, 1.0) / max(len(items), 1)
-        bars_code = ""
-        for i, item in enumerate(items):
-            parts = item.split(":")
-            label = parts[0] if len(parts) > 0 else f"Item {i}"
-            value = parts[1] if len(parts) > 1 else "0"
-            color = parts[2].upper() if len(parts) > 2 else "GLOW"
-            y_pos = 2.0 - i * 1.0
-            bar_width = min(float(value) / 25000 * 8, 8.0) if value.replace(",","").isdigit() else 4.0
-            bars_code += f'''
-        bar_{i} = Rectangle(width={bar_width:.1f}, height=0.5, color={color},
-                           fill_color={color}, fill_opacity=0.3, stroke_width=2)
-        bar_{i}.move_to(LEFT * {(8-bar_width)/2:.1f} + UP * {y_pos:.1f})
-        bar_{i}_label = Text("{label}", font="Courier", color={color}, weight=BOLD).scale(0.3)
-        bar_{i}_label.next_to(bar_{i}, LEFT, buff=0.3)
-        bar_{i}_val = Text("{value}", font="Courier", color={color}).scale(0.35)
-        bar_{i}_val.next_to(bar_{i}, RIGHT, buff=0.2)
-        self.play(GrowFromEdge(bar_{i}, LEFT), FadeIn(bar_{i}_label), FadeIn(bar_{i}_val),
-                  run_time={bar_time:.1f})
-'''
-        body = f'''
-        # Bar chart{bars_code}
-        alive_wait(self, 1.0, particles=bg)'''
-        return self._scene_wrapper("Scene_bar_chart", body, duration)
-
-    def anim_before_after(self, duration, images_dir="", **kw):
-        label = kw.get("label", "Metric")
-        before = kw.get("before", "0")
-        after = kw.get("after", "0")
-        color = kw.get("color", "gold").upper()
-        body = f'''
-        # Before/After: {label}
-        header = Text("{label}", font="Courier", color=TEXT_COL, weight=BOLD).scale(0.5)
-        header.move_to(UP * 2.5)
-        self.play(FadeIn(header), run_time=0.5)
-
-        # Before
-        before_lbl = Text("BEFORE", font="Courier", color=TEXT_DIM).scale(0.35)
-        before_lbl.move_to(LEFT * 3 + UP * 1.2)
-        before_val = Text("{before}", font="Courier", color=TEXT_DIM, weight=BOLD).scale(0.8)
-        before_val.move_to(LEFT * 3)
-        self.play(FadeIn(before_lbl), FadeIn(before_val), run_time=1.0)
-        alive_wait(self, {duration * 0.2:.1f}, particles=bg)
-
-        # Arrow
-        arrow = Arrow(LEFT * 1, RIGHT * 1, color=GLOW, stroke_width=3)
-        self.play(GrowArrow(arrow), run_time=0.8)
-
-        # After
-        after_lbl = Text("AFTER", font="Courier", color={color}).scale(0.35)
-        after_lbl.move_to(RIGHT * 3 + UP * 1.2)
-        after_val = Text("{after}", font="Courier", color={color}, weight=BOLD).scale(0.8)
-        after_val.move_to(RIGHT * 3)
-        self.play(FadeIn(after_lbl), FadeIn(after_val, scale=1.3), run_time=1.0)
-        throb_title(self, after_val, cycles=1, scale_factor=1.05)
-        alive_wait(self, {max(duration - 6.0, 1.0):.1f}, particles=bg)'''
-        return self._scene_wrapper("Scene_before_after", body, duration)
-
-    def anim_organism_reveal(self, duration, images_dir="", **kw):
-        image = kw.get("image", "")
-        name = kw.get("name", "Organism")
-        compound = kw.get("compound", "Compound")
-        note = kw.get("note", "")
-        img_path = f"{images_dir}/{image}" if image else ""
-        hold = max(duration - 5.0, 2.0)
-        body = f'''
-        # Organism reveal: {name}
-        try:
-            img = ImageMobject("{img_path}")
-            img.height = 4.5
-            img.width = min(img.width * (4.5 / img.height), 5.5)
-            img.move_to(LEFT * 2.5)
-            self.play(FadeIn(img), run_time=1.5)
-            self.play(img.animate.scale(1.04), run_time={hold:.1f}, rate_func=linear)
-        except Exception:
-            img = Rectangle(width=5, height=3.5, color=CYAN, stroke_width=1)
-            img.move_to(LEFT * 2.5)
-            self.play(FadeIn(img), run_time=1.0)
-            alive_wait(self, {hold:.1f}, particles=bg)
-
-        info = VGroup(
-            Text("{name}", font="Courier", color=CYAN, weight=BOLD).scale(0.4),
-            Text("{compound}", font="Courier", color=GOLD).scale(0.45),
-            Text("{note}", font="Courier", color=TEXT_DIM).scale(0.3),
-        ).arrange(DOWN, buff=0.15, aligned_edge=LEFT).move_to(RIGHT * 3)
-        self.play(FadeIn(info, lag_ratio=0.3), run_time=1.5)
-        alive_wait(self, 1.0, particles=bg)'''
-        return self._scene_wrapper("Scene_organism_reveal", body, duration)
 
 
 theme = BiopunkTheme()

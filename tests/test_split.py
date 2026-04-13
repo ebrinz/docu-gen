@@ -13,7 +13,7 @@ def test_split_simple_chapter():
     }
     clips = split_chapter(chapter, default_exaggeration=0.5)
     assert len(clips) >= 2
-    assert clips[0]["visuals"]["type"] == "chapter_card"
+    assert clips[0]["visuals"]["choreography"]["type"] == "chapter_card"
     assert clips[0]["clip_id"] == "intro_01"
     assert clips[1]["clip_id"] == "intro_02"
 
@@ -28,7 +28,7 @@ def test_split_long_narration_breaks_at_35_words():
         "visuals": {"existing_svg": [], "source_images": []},
     }
     clips = split_chapter(chapter, default_exaggeration=0.5)
-    content_clips = [c for c in clips if c["visuals"]["type"] != "chapter_card"]
+    content_clips = [c for c in clips if c["visuals"].get("choreography", {}).get("type") != "chapter_card"]
     assert len(content_clips) >= 2
     for clip in content_clips:
         assert len(clip["text"].split()) <= 45
@@ -46,11 +46,11 @@ def test_split_assigns_assets_to_clips():
         },
     }
     clips = split_chapter(chapter, default_exaggeration=0.3)
-    asset_clips = [c for c in clips if c["visuals"]["assets"]]
+    asset_clips = [c for c in clips if c["visuals"].get("content", {}).get("assets")]
     assert len(asset_clips) >= 1
     all_assets = []
     for c in asset_clips:
-        all_assets.extend(c["visuals"]["assets"])
+        all_assets.extend(c["visuals"]["content"]["assets"])
     assert "fig1.svg" in all_assets
     assert "fig2.svg" in all_assets
 
