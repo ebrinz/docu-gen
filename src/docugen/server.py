@@ -6,6 +6,7 @@ from docugen.tools.init_project import init_project
 from docugen.tools.plan import extract_pdf_text, generate_plan
 from docugen.split import split_plan
 from docugen.align import align_plan
+from docugen.choreographer import auto_choreograph
 from docugen.tools.narrate import generate_narration
 from docugen.tools.render import render_all
 from docugen.tools.score import generate_score
@@ -85,6 +86,20 @@ def align(project_path: str) -> str:
         project_path: Path to project directory.
     """
     return align_plan(project_path)
+
+
+@mcp.tool()
+def choreograph(project_path: str) -> str:
+    """Auto-assign animation choreography based on narration content.
+
+    Analyzes clip text for numbers, compounds, organisms, comparisons,
+    and assigns matching animation primitives. Does not override
+    existing choreography. Run after align, before render.
+
+    Args:
+        project_path: Path to project directory.
+    """
+    return auto_choreograph(project_path)
 
 
 @mcp.tool()
