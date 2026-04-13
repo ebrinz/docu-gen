@@ -18,32 +18,40 @@ def _get_wav_duration(path: Path) -> float:
 
 
 def _build_timeline(project_path: Path, clips_data: dict) -> list[dict]:
-    """Build chapter-level timeline from clip WAV durations."""
+    """Build chapter-level timeline from clip timing model.
+
+    Falls back to WAV measurement if timing model not yet computed.
+    """
     narr_dir = project_path / "build" / "narration"
     timeline = []
-    offset = 0.0
+    global_offset = 0.0
 
     for chapter in clips_data["chapters"]:
-        ch_start = offset
+        ch_start = global_offset
         ch_dur = 0.0
         for clip in chapter["clips"]:
-            clip_id = clip["clip_id"]
-            wav_path = narr_dir / f"{clip_id}.wav"
-            if wav_path.exists():
-                dur = _get_wav_duration(wav_path)
-            else:
-                dur = 3.0  # default for silent clips
-            # Add pacing buffer
-            pacing = clip.get("pacing", "normal")
-            buffer = {"tight": 0.5, "normal": 1.5, "breathe": 3.5}.get(pacing, 1.5)
-            ch_dur += dur + buffer
+            timing = clip.get("timing", {})
+            clip_dur = timing.get("clip_duration", 0)
+
+            # Fallback: measure WAV if timing not yet computed
+            if clip_dur <= 0:
+                clip_id = clip["clip_id"]
+                wav_path = narr_dir / f"{clip_id}.wav"
+                if wav_path.exists():
+                    clip_dur = _get_wav_duration(wav_path)
+                else:
+                    clip_dur = 3.0
+                pacing = clip.get("pacing", "normal")
+                clip_dur += {"tight": 0.5, "normal": 1.5, "breathe": 3.5}.get(pacing, 1.5)
+
+            ch_dur += clip_dur
 
         timeline.append({
             "id": chapter["id"],
             "start": ch_start,
             "dur": ch_dur,
         })
-        offset += ch_dur
+        global_offset += ch_dur
 
     return timeline
 

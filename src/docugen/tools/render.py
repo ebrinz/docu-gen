@@ -637,15 +637,19 @@ def render_clip(project_path: Path, clip: dict, theme_name: str,
     if out_mp4.exists():
         return str(out_mp4)
 
-    # Get duration from narration WAV + pacing buffer
-    wav_path = project_path / "build" / "narration" / f"{clip_id}.wav"
-    if wav_path.exists():
-        duration = _get_wav_duration(wav_path)
-    else:
-        duration = 3.0  # default for clips without narration (chapter cards)
+    # Get duration from timing model (computed by direct_apply)
+    timing = clip.get("timing", {})
+    duration = timing.get("clip_duration", 0)
 
-    pacing = clip.get("pacing", "normal")
-    duration += PACING_BUFFER.get(pacing, 1.5)
+    # Fallback: measure WAV if timing not yet computed
+    if duration <= 0:
+        wav_path = project_path / "build" / "narration" / f"{clip_id}.wav"
+        if wav_path.exists():
+            duration = _get_wav_duration(wav_path)
+        else:
+            duration = 3.0
+        pacing = clip.get("pacing", "normal")
+        duration += PACING_BUFFER.get(pacing, 1.5)
 
     script = build_clip_script(
         clip, theme_name, duration, str(images_dir),

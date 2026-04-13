@@ -194,25 +194,34 @@ def _stitch_from_clips(project_path: Path) -> str:
     # Build voice track from per-clip WAVs
     voice = np.zeros((total_samples, 2))
     narr_dir = build_dir / "narration"
-    offset = 0
+    global_offset = 0.0
     for chapter in clips_data["chapters"]:
         for clip in chapter["clips"]:
             clip_id = clip["clip_id"]
+            timing = clip.get("timing", {})
+            clip_duration = timing.get("clip_duration", 0)
+
             wav_path = narr_dir / f"{clip_id}.wav"
             if wav_path.exists():
                 _, data = _read_wav_float(wav_path)
                 data = _mono_to_stereo(data)
-                start = int(offset * SR)
+                start = int(global_offset * SR)
                 end = min(start + data.shape[0], total_samples)
                 actual = end - start
                 if actual > 0:
                     voice[start:end] = data[:actual]
-                offset += data.shape[0] / SR
+
+            # Advance by timing model duration (includes pacing pad)
+            if clip_duration > 0:
+                global_offset += clip_duration
             else:
-                offset += 3.0  # silent clip (chapter card)
-            # Add pacing buffer
-            pacing = clip.get("pacing", "normal")
-            offset += {"tight": 0.5, "normal": 1.5, "breathe": 3.5}.get(pacing, 1.5)
+                # Fallback: WAV duration + pacing buffer
+                if wav_path.exists():
+                    global_offset += data.shape[0] / SR
+                else:
+                    global_offset += 3.0
+                pacing = clip.get("pacing", "normal")
+                global_offset += {"tight": 0.5, "normal": 1.5, "breathe": 3.5}.get(pacing, 1.5)
 
     # Load pre-generated score
     score_path = build_dir / "score.wav"

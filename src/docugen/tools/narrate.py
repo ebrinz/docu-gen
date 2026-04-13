@@ -9,6 +9,7 @@ from scipy.io import wavfile
 from openai import OpenAI
 
 from docugen.config import load_config
+from docugen.numberwords import numbers_to_words
 
 TARGET_SR = 44100
 
@@ -128,6 +129,46 @@ def _generate_chatterbox(voice_config: dict, text: str,
 
 
 # ---------------------------------------------------------------------------
+# Short clip consolidation (Chatterbox)
+# ---------------------------------------------------------------------------
+
+SHORT_WORD_LIMIT = 6
+HIGH_EXAGGERATION = 0.3
+
+
+def _detect_short_hot_clips(clips: list[dict]) -> list[int]:
+    """Find clips that are short + high exaggeration (Chatterbox failure mode).
+
+    Returns list of indices into the clips list.
+    """
+    indices = []
+    for i, clip in enumerate(clips):
+        word_count = len(clip.get("word_times", []))
+        if word_count == 0:
+            word_count = len(clip.get("text", "").split())
+        exagg = clip.get("exaggeration", 0.0)
+        if word_count <= SHORT_WORD_LIMIT and exagg >= HIGH_EXAGGERATION:
+            indices.append(i)
+    return indices
+
+
+def _plan_consolidation(clips: list[dict],
+                        short_indices: list[int]) -> list[dict]:
+    """Plan which short clips merge into which neighbors.
+
+    Prefers merging into the preceding clip (setup to punchline).
+    Returns list of {"merge_into": int, "short_index": int}.
+    """
+    plan = []
+    for idx in short_indices:
+        if idx > 0:
+            plan.append({"merge_into": idx - 1, "short_index": idx})
+        elif idx < len(clips) - 1:
+            plan.append({"merge_into": idx + 1, "short_index": idx})
+    return plan
+
+
+# ---------------------------------------------------------------------------
 # Clip-based generation (new pipeline)
 # ---------------------------------------------------------------------------
 
@@ -149,6 +190,9 @@ def _generate_from_clips(project_path: Path, config: dict) -> str:
             text = clip.get("text", "")
             if not text.strip():
                 continue  # skip empty clips (chapter cards with no narration)
+
+            # Convert numeric symbols to natural English for cleaner TTS
+            text = numbers_to_words(text)
 
             out_path = narration_dir / f"{clip_id}.wav"
 
@@ -188,7 +232,7 @@ def _generate_from_plan(project_path: Path, config: dict) -> str:
 
     for chapter in plan["chapters"]:
         cid = chapter["id"]
-        text = chapter["narration"]
+        text = numbers_to_words(chapter["narration"])
         out_path = narration_dir / f"{cid}.wav"
 
         if engine == "chatterbox":

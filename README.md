@@ -4,32 +4,94 @@
 
 # docu-gen
 
-An [MCP server](https://modelcontextprotocol.io/) that transforms PDF technical specifications into narrated documentary videos — complete with animated scenes, chapter cards, and ambient drone audio.
+An [MCP server](https://modelcontextprotocol.io/) that transforms PDF technical specifications into narrated documentary videos — complete with animated scenes, chapter cards, ambient drone scoring, and word-level narration sync.
 
 Give it a PDF spec, some images, and creative direction. It gives you back a polished MP4.
 
 ## How It Works
 
-docu-gen exposes four tools through the Model Context Protocol, designed to run in sequence:
+docu-gen exposes nine tools through the Model Context Protocol, designed to run in sequence:
 
 | Step | Tool | What it does |
 |------|------|-------------|
-| 1 | **`plan`** | Extracts text from your PDF and generates a chapter structure with narration scripts |
-| 2 | **`narrate`** | Generates text-to-speech audio for each chapter using OpenAI TTS |
-| 3 | **`render`** | Creates animated video scenes using [Manim](https://www.manim.community/) — title cards, image galleries with Ken Burns motion, infographic diagrams |
-| 4 | **`stitch`** | Combines everything into a final MP4 with synthesized ambient drone audio and voice-activated ducking |
+| 1 | **`init`** | Creates a new project directory with theme selection and config scaffold |
+| 2 | **`plan`** | Extracts text from your PDF and generates a chapter structure with narration scripts |
+| 3 | **`split`** | Breaks chapters into individual clips with emotion tagging, exaggeration levels, and pacing |
+| 4 | **`narrate`** | Generates text-to-speech audio for each clip (OpenAI TTS or Chatterbox — see below) |
+| 5 | **`align`** | Runs Whisper on each clip's audio to produce word-level timestamps for visual sync |
+| 6a | **`direct_prepare`** | Gathers production plan visuals, clips, assets, and slide type registry; returns context for creative direction |
+| 6b | **`direct_apply`** | Validates creative direction JSON, computes WAV-derived timing, writes back to clips.json |
+| — | **`title`** | Optional standalone tool: generate a title card (particle, glitch, trace, or typewriter style) |
+| 7 | **`render`** | Creates animated video scenes per clip using [Manim](https://www.manim.community/) and the project's theme |
+| 8 | **`score`** | Generates a synthesized ambient drone score with per-chapter layers and transition sounds |
+| 9 | **`stitch`** | Assembles clips, mixes narration with score (voice-activated ducking), outputs final MP4 |
 
-Between each step you can review and edit the intermediate artifacts (especially `plan.json`) before proceeding.
+Between each step you can review and edit the intermediate artifacts — especially `build/clips.json` after split, where you can tune emotion, pacing, and visual direction per clip before proceeding.
 
 ## Prerequisites
 
 - **Python 3.10+**
 - **ffmpeg** — for video/audio processing
-- **An OpenAI API key** — used for plan generation (GPT-4o) and narration (TTS)
+- **An OpenAI API key** — used for plan generation (GPT-4o) and optionally narration (TTS)
+
+## Voice Engines
+
+docu-gen supports two TTS engines. **Chatterbox is recommended** for production — it runs fully local, supports voice cloning from a reference audio file, and gives you fine-grained control over expressiveness.
+
+### Chatterbox (recommended — local)
+
+[Chatterbox](https://github.com/resemble-ai/chatterbox) runs on-device via MLX (Apple Silicon) or PyTorch. No API key needed for narration. Clone any voice from a short reference clip.
+
+```bash
+pip install chatterbox-tts    # PyTorch
+# or
+pip install chatterbox-mlx    # Apple Silicon (MPS acceleration)
+```
+
+Configure in your project's `config.yaml`:
+
+```yaml
+voice:
+  engine: chatterbox
+  ref_audio: assets/my-voice.wav   # 5-30s reference clip for voice cloning
+  exaggeration: 0.15               # Emotion intensity (0.0 = flat, 1.0 = max)
+  cfg_weight: 0.8                  # Classifier-free guidance weight
+  post_fx:                         # Optional audio post-processing
+    ring_freq: 30                  # Ring modulator frequency (Hz)
+    formant_shift: 1.05            # Formant shift multiplier
+    dry_wet: 0.2                   # Effect mix (0.0 = dry, 1.0 = full effect)
+```
+
+> **Tip:** Keep exaggeration clamped relative to clip word count for natural delivery — short phrases (< 5 words) stay under 0.30, medium (< 15 words) under 0.50.
+
+### OpenAI TTS (cloud)
+
+Uses the OpenAI API. Simpler setup, but requires a network connection and API credits.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+```yaml
+voice:
+  engine: openai       # default if engine is omitted
+  model: tts-1-hd
+  voice: echo          # Options: alloy, echo, fable, nova, onyx, shimmer
+```
+
+## Whisper Alignment (local)
+
+The `align` tool uses [OpenAI Whisper](https://github.com/openai/whisper) locally to transcribe each narration clip, then cross-correlates the transcription against the ground-truth text to produce word-level timestamps. These timestamps drive visual sync — animation cues, text reveals, and data transitions all key off `word_times` in `clips.json`.
+
+```bash
+pip install openai-whisper
+```
+
+Whisper runs entirely on-device (no API calls). The `small` model is used by default — accurate enough for timestamp alignment while keeping inference fast. On Apple Silicon, it will use MPS acceleration automatically.
 
 ### Setting up your API key
 
-The `plan` and `narrate` tools call the OpenAI API. You need to set your key as an environment variable:
+The `plan` tool calls the OpenAI API for chapter generation. If using OpenAI TTS for narration, the same key is used there too.
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -45,10 +107,15 @@ cd docu-gen
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+
+# Local voice + alignment (recommended)
+pip install chatterbox-mlx     # or chatterbox-tts for PyTorch
+pip install openai-whisper
+
 cp example.mcp.json .mcp.json
 ```
 
-Then open a Claude Code session in the `docu-gen` directory and start prompting. The four `docugen` tools (`plan`, `narrate`, `render`, `stitch`) will be available automatically.
+Then open a Claude Code session in the `docu-gen` directory and start prompting. The nine `docugen` tools will be available automatically.
 
 ## Connecting to Claude Code
 
@@ -102,14 +169,35 @@ You can put project directories anywhere on your filesystem.
 Once connected to your MCP client, use the tools in order. Each tool takes the path to your project directory:
 
 ```
+→ init("my-project")
+  Creates project scaffold
+
 → plan("/path/to/my-project")
   Review and edit build/plan.json
 
+→ split("/path/to/my-project")
+  Review and edit build/clips.json — tune emotion, pacing, visuals per clip
+
 → narrate("/path/to/my-project")
-  Check build/narration/*.wav
+  Check build/narration/*.wav — skips existing files on re-runs
+
+→ align("/path/to/my-project")
+  Adds word_times to clips.json — word-level timestamps via Whisper
+
+→ direct_prepare("/path/to/my-project")
+  Returns context summary — review and decide creative direction per clip
+
+→ direct_apply("/path/to/my-project", direction_json)
+  Validates direction, computes timing — review clips.json before render
+
+→ title("/path/to/my-project")
+  Optional: generate standalone title card (particle, glitch, trace, typewriter)
 
 → render("/path/to/my-project")
-  Preview build/clips/*.mp4
+  Preview build/clips/*.mp4 — Manim scenes per clip
+
+→ score("/path/to/my-project")
+  Check build/score.wav — ambient drone with chapter transitions
 
 → stitch("/path/to/my-project")
   Final output: build/final.mp4
@@ -124,8 +212,13 @@ See `example/config.yaml` for a complete template. Key options:
 ```yaml
 title: "My Documentary"
 voice:
-  model: tts-1-hd
-  voice: echo          # Options: alloy, echo, fable, nova, onyx, shimmer
+  engine: chatterbox               # "chatterbox" (recommended) or "openai"
+  ref_audio: assets/my-voice.wav   # Required for chatterbox
+  exaggeration: 0.15               # Chatterbox emotion intensity
+  # --- or for OpenAI TTS ---
+  # engine: openai
+  # model: tts-1-hd
+  # voice: echo
 video:
   resolution: 1080p
   fps: 60
@@ -150,14 +243,23 @@ focused — one concept per chapter. Use the banner image for intro and outro.
 
 ```
 src/docugen/
-├── server.py          # MCP server & tool definitions
-├── config.py          # Configuration loading & defaults
-├── drone.py           # Synthetic ambient drone audio generation
+├── server.py              # MCP server — 9 tools exposed via stdio
+├── config.py              # Configuration loading & defaults
+├── split.py               # Chapter → clip splitting, emotion tagging, pacing
+├── align.py               # Whisper transcription → word-level timestamp alignment
+├── direct.py              # Creative direction: prepare context + apply validated direction JSON
+├── drone.py               # Synthetic ambient drone audio generation
+├── themes/
+│   ├── base.py            # Base theme interface
+│   └── biopunk.py         # Biopunk Imperial theme — scene rendering, transitions, FX
 └── tools/
-    ├── plan.py        # PDF extraction & chapter planning (OpenAI)
-    ├── narrate.py     # Text-to-speech generation (OpenAI)
-    ├── render.py      # Manim scene rendering
-    └── stitch.py      # Audio mixing & video concatenation
+    ├── init_project.py    # Project scaffolding
+    ├── plan.py            # PDF extraction & chapter planning (OpenAI)
+    ├── narrate.py         # TTS generation (Chatterbox local or OpenAI cloud)
+    ├── render.py          # Manim scene rendering per clip
+    ├── score.py           # Per-chapter drone score with transition sounds
+    ├── stitch.py          # Audio mixing & video concatenation
+    └── title.py           # Standalone title card generator (particle, glitch, trace, typewriter)
 ```
 
 ## Running Tests
