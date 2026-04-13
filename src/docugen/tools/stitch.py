@@ -169,7 +169,7 @@ def _build_concat_file(project_path: Path, clips_data: dict) -> Path:
         for clip in chapter["clips"]:
             clip_path = clips_dir / f"{clip['clip_id']}.mp4"
             if clip_path.exists():
-                lines.append(f"file '{clip_path}'")
+                lines.append(f"file '{clip_path.resolve()}'")
     concat_file.write_text("\n".join(lines))
     return concat_file
 
