@@ -9,7 +9,7 @@ from scipy.io import wavfile
 from scipy.signal import lfilter
 
 from docugen.config import load_config
-from docugen.drone import generate_drone_track
+# drone import removed — score tool handles generation now
 
 SR = 44100
 
@@ -158,15 +158,103 @@ def _get_video_duration(video_path: Path) -> float:
     return float(result.stdout.strip())
 
 
-def stitch_all(project_path: str | Path) -> str:
-    """Stitch clips + narration + drone into final video."""
-    project_path = Path(project_path)
+def _build_concat_file(project_path: Path, clips_data: dict) -> Path:
+    """Generate ffmpeg concat file from clips.json clip IDs."""
+    clips_dir = project_path / "build" / "clips"
+    build_dir = project_path / "build"
+    concat_file = build_dir / "concat.txt"
+
+    lines = []
+    for chapter in clips_data["chapters"]:
+        for clip in chapter["clips"]:
+            clip_path = clips_dir / f"{clip['clip_id']}.mp4"
+            if clip_path.exists():
+                lines.append(f"file '{clip_path}'")
+    concat_file.write_text("\n".join(lines))
+    return concat_file
+
+
+def _stitch_from_clips(project_path: Path) -> str:
+    """Stitch from clips.json — assembly only."""
+    config = load_config(project_path)
+    build_dir = project_path / "build"
+    clips_data = json.loads((build_dir / "clips.json").read_text())
+
+    # Concat video clips
+    concat_file = _build_concat_file(project_path, clips_data)
+    concat_video = build_dir / "concat.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+         "-i", str(concat_file), "-c", "copy", str(concat_video)],
+        capture_output=True, text=True, check=True,
+    )
+    video_duration = _get_video_duration(concat_video)
+    total_samples = int(video_duration * SR)
+
+    # Build voice track from per-clip WAVs
+    voice = np.zeros((total_samples, 2))
+    narr_dir = build_dir / "narration"
+    offset = 0
+    for chapter in clips_data["chapters"]:
+        for clip in chapter["clips"]:
+            clip_id = clip["clip_id"]
+            wav_path = narr_dir / f"{clip_id}.wav"
+            if wav_path.exists():
+                _, data = _read_wav_float(wav_path)
+                data = _mono_to_stereo(data)
+                start = int(offset * SR)
+                end = min(start + data.shape[0], total_samples)
+                actual = end - start
+                if actual > 0:
+                    voice[start:end] = data[:actual]
+                offset += data.shape[0] / SR
+            else:
+                offset += 3.0  # silent clip (chapter card)
+            # Add pacing buffer
+            pacing = clip.get("pacing", "normal")
+            offset += {"tight": 0.5, "normal": 1.5, "breathe": 3.5}.get(pacing, 1.5)
+
+    # Load pre-generated score
+    score_path = build_dir / "score.wav"
+    if score_path.exists():
+        _, score = _read_wav_float(score_path)
+        score = _mono_to_stereo(score)
+        score = _pad_or_trim(score, total_samples)
+    else:
+        score = np.zeros((total_samples, 2))
+
+    # Mix
+    duck_db = config["drone"]["duck_db"]
+    mixed = mix_audio(voice, score, duck_db=duck_db, sr=SR)
+
+    # Write and mux
+    mixed_wav = build_dir / "mixed_audio.wav"
+    wavfile.write(str(mixed_wav), SR,
+                  np.clip(mixed * 32767, -32768, 32767).astype(np.int16))
+
+    final_path = build_dir / "final.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(concat_video), "-i", str(mixed_wav),
+         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+         str(final_path)],
+        capture_output=True, text=True, check=True,
+    )
+
+    concat_file.unlink(missing_ok=True)
+    concat_video.unlink(missing_ok=True)
+
+    return f"Final video: {final_path} ({video_duration:.1f}s)"
+
+
+def _stitch_from_plan(project_path: Path) -> str:
+    """Legacy stitch from plan.json — generates drone inline."""
+    from docugen.drone import generate_drone_track
+
     config = load_config(project_path)
     drone_config = config["drone"]
     build_dir = project_path / "build"
 
     plan = json.loads((build_dir / "plan.json").read_text())
-
     concat_video = _concatenate_clips(project_path, plan)
     video_duration = _get_video_duration(concat_video)
 
@@ -183,8 +271,7 @@ def stitch_all(project_path: str | Path) -> str:
             track_data = tracks[cid]["data"]
             start_sample = int(offset * SR)
             end_sample = min(start_sample + track_data.shape[0], total_samples)
-            actual_len = end_sample - start_sample
-            voice_full[start_sample:end_sample] = track_data[:actual_len]
+            voice_full[start_sample:end_sample] = track_data[:end_sample - start_sample]
             offset += tracks[cid]["duration"]
         else:
             offset += chapter.get("duration_estimate", 10.0)
@@ -198,29 +285,37 @@ def stitch_all(project_path: str | Path) -> str:
         sr=SR,
     )
     drone = _pad_or_trim(drone, total_samples)
-
     mixed = mix_audio(voice_full, drone, duck_db=drone_config["duck_db"], sr=SR)
 
     mixed_wav = build_dir / "mixed_audio.wav"
-    output_16 = np.clip(mixed * 32767, -32768, 32767).astype(np.int16)
-    wavfile.write(str(mixed_wav), SR, output_16)
+    wavfile.write(str(mixed_wav), SR,
+                  np.clip(mixed * 32767, -32768, 32767).astype(np.int16))
 
     final_path = build_dir / "final.mp4"
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", str(concat_video),
-        "-i", str(mixed_wav),
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-shortest",
-        str(final_path),
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"FFmpeg merge failed:\n{result.stderr}")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(concat_video), "-i", str(mixed_wav),
+         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+         str(final_path)],
+        capture_output=True, text=True, check=True,
+    )
 
     (build_dir / "concat.txt").unlink(missing_ok=True)
     concat_video.unlink(missing_ok=True)
 
     return f"Final video: {final_path} ({video_duration:.1f}s)"
+
+
+def stitch_all(project_path: str | Path) -> str:
+    """Assemble clips, narration, and score into final video.
+
+    Uses clips.json if available (per-clip assembly with pre-generated score).
+    Falls back to plan.json (legacy, generates drone inline).
+    """
+    project_path = Path(project_path)
+    build_dir = project_path / "build"
+
+    if (build_dir / "clips.json").exists():
+        return _stitch_from_clips(project_path)
+    if (build_dir / "plan.json").exists():
+        return _stitch_from_plan(project_path)
+    raise FileNotFoundError("No clips.json or plan.json found.")
