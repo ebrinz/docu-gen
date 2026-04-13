@@ -148,6 +148,24 @@ def generate_score(project_path: str | Path) -> str:
     except (ValueError, ImportError):
         pass  # No theme layers available, use base drone only
 
+    # Overlay cue sheet audio FX if available
+    cue_sheet_path = build_dir / "cue_sheet.json"
+    if cue_sheet_path.exists():
+        try:
+            from docugen.audio_fx import render_cue_sheet
+            cue_sheet = json.loads(cue_sheet_path.read_text())
+            if cue_sheet:
+                fx_track = render_cue_sheet(cue_sheet, total_dur, SR)
+                # Trim/pad to match drone length
+                if fx_track.shape[0] > drone.shape[0]:
+                    fx_track = fx_track[:drone.shape[0]]
+                elif fx_track.shape[0] < drone.shape[0]:
+                    pad = np.zeros((drone.shape[0] - fx_track.shape[0], 2))
+                    fx_track = np.vstack([fx_track, pad])
+                drone += fx_track
+        except Exception:
+            pass  # FX are optional — don't break the score if synthesis fails
+
     # Normalize
     peak = np.max(np.abs(drone)) + 1e-10
     drone = drone / peak * 0.9

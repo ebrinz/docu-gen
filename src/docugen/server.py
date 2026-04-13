@@ -11,10 +11,11 @@ from docugen.tools.render import render_all
 from docugen.tools.score import generate_score
 from docugen.tools.stitch import stitch_all
 from docugen.tools.title import generate_title
+from docugen.spot import spot_project
 
 mcp = FastMCP("docugen", instructions=(
     "Documentary generation pipeline. Use tools in order: "
-    "init -> plan -> split -> narrate -> align -> direct_prepare -> direct_apply -> render -> score -> stitch. "
+    "init -> plan -> split -> narrate -> align -> direct_prepare -> direct_apply -> spot -> render -> score -> stitch. "
     "Use title to generate a standalone title card. "
     "Review and edit clips.json between steps to adjust "
     "emotion, pacing, visual direction, and cue words per clip."
@@ -137,6 +138,23 @@ def title(project_path: str, title_text: str = "",
         reveal_style: Animation style.
     """
     return generate_title(project_path, title_text, subtitle_text, reveal_style)
+
+
+@mcp.tool()
+def spot(project_path: str) -> str:
+    """Build audio cue sheet from visual direction + timing.
+
+    Walks every clip's cue_words, computes global timestamps, maps events
+    to audio spans (tension builds, hits, sweeps, ticks, etc.) using the
+    slide registry's span patterns. Writes build/cue_sheet.json for the
+    score tool to consume.
+
+    Run after direct_apply, before render.
+
+    Args:
+        project_path: Path to project directory.
+    """
+    return spot_project(project_path)
 
 
 @mcp.tool()
