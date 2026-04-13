@@ -888,6 +888,165 @@ def make_floating_bg(n=80, spread=7.0):
 
     # Legacy idle_scene override removed — base class build_scene handles it
 
+    # ── Bespoke slide-type builders ──────────────────────────────
+
+    def _build_photo_organism_scene(self, clip, duration, images_dir,
+                                    chapter_num, chapter_title):
+        """Photo inset with imperial border frame and animated pointer labels."""
+        clip_id = clip["clip_id"]
+        visuals = clip.get("visuals", {})
+        assets = visuals.get("assets", [])
+        cue_words = visuals.get("cue_words", [])
+        word_times = clip.get("word_times", [])
+        photo = assets[0] if assets else ""
+        images_dir_esc = images_dir.replace("\\", "\\\\")
+
+        # Build label animations keyed to cue_words
+        label_code_parts = []
+        label_count = 0
+        for cue in cue_words:
+            event = cue.get("event", "")
+            params = cue.get("params", {})
+            idx = cue.get("at_index", 0)
+            t = word_times[idx]["start"] if idx < len(word_times) else 0
+
+            if event in ("show_name", "show_note", "show_structure"):
+                text = params.get("name", params.get("note", params.get("structure", "")))
+                color = {"show_name": palette["gold"], "show_note": palette["cyan"],
+                         "show_structure": palette["purple"]}[event]
+                i = label_count
+                label_code_parts.append(f'''
+        # Wait until cue word at {t:.2f}s
+        current_time_{i} = self.renderer.time if hasattr(self.renderer, 'time') else 0
+        wait_{i} = max(0, {t:.2f} - current_time_{i})
+        if wait_{i} > 0:
+            self.wait(wait_{i})
+
+        lbl_{i} = Text("{text}", color="{color}", font_size=22)
+        lbl_box_{i} = SurroundingRectangle(lbl_{i}, color="{color}",
+                                            fill_color="{palette['bg']}", fill_opacity=0.85,
+                                            buff=0.15, corner_radius=0.05)
+        lbl_group_{i} = VGroup(lbl_box_{i}, lbl_{i})
+        lbl_group_{i}.next_to(photo_frame, RIGHT, buff=0.8).shift(DOWN * {i * 0.9 - 0.5})
+        pointer_{i} = Line(
+            photo_frame.get_right() + RIGHT * 0.1,
+            lbl_group_{i}.get_left() + LEFT * 0.1,
+            color="{color}", stroke_width=1.5,
+        )
+        self.play(Create(pointer_{i}), FadeIn(lbl_group_{i}, shift=RIGHT * 0.2), run_time=0.8)
+        self.wait(0.3)''')
+                label_count += 1
+
+        labels_block = "\n".join(label_code_parts)
+
+        return self.manim_header() + f'''
+from pathlib import Path
+
+class Scene_{clip_id}(Scene):
+    def construct(self):
+        # Imperial border — corner brackets
+        corners = VGroup()
+        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
+            cx, cy = x_sign * 6.5, y_sign * 3.5
+            h_line = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
+                         color="{palette['gold']}", stroke_width=1.5)
+            v_line = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
+                         color="{palette['gold']}", stroke_width=1.5)
+            corners.add(h_line, v_line)
+        self.play(Create(corners, lag_ratio=0.1), run_time=1.0)
+
+        # Photo inset with frame
+        photo_path = Path("{images_dir_esc}") / "{photo}"
+        if photo_path.exists():
+            photo_img = ImageMobject(str(photo_path))
+            photo_img.height = 4.0
+            photo_img.width = min(photo_img.width, 5.0)
+        else:
+            photo_img = Rectangle(width=4, height=3, color="{palette['grid']}",
+                                 fill_opacity=0.3)
+        photo_img.move_to(LEFT * 2.5)
+        photo_frame = SurroundingRectangle(photo_img, color="{palette['gold']}",
+                                           buff=0.08, corner_radius=0.05,
+                                           stroke_width=1.5)
+        self.play(FadeIn(photo_img), Create(photo_frame), run_time=1.2)
+
+        # Animated pointer labels (cue-word synced)
+{labels_block}
+
+        # Hold remaining time
+        hold = max({duration} - 2.2 - {label_count} * 1.1, 0.5)
+        self.wait(hold)
+        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.0)
+'''
+
+    def _build_counter_sync_scene(self, clip, duration, images_dir,
+                                  chapter_num, chapter_title):
+        """Number counter that starts at the cue word timestamp."""
+        clip_id = clip["clip_id"]
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        word_times = clip.get("word_times", [])
+
+        # Find start_count cue
+        count_time = 0.5
+        count_to = 0
+        count_color = palette["gold"]
+        count_label = ""
+        for cue in cue_words:
+            if cue.get("event") == "start_count":
+                idx = cue.get("at_index", 0)
+                if idx < len(word_times):
+                    count_time = word_times[idx]["start"]
+                params = cue.get("params", {})
+                count_to = params.get("to", 0)
+                color_name = params.get("color", "gold")
+                color_map = {"gold": palette["gold"], "cyan": palette["cyan"],
+                            "green": palette["glow"], "red": palette["sith_red"]}
+                count_color = color_map.get(color_name, palette["gold"])
+                count_label = params.get("label", "")
+                break
+
+        # Try to parse count_to as a number
+        try:
+            count_val = int(str(count_to).replace(",", ""))
+        except (ValueError, TypeError):
+            count_val = 0
+
+        return self.manim_header() + f'''
+
+class Scene_{clip_id}(Scene):
+    def construct(self):
+        # Theme background
+        bg = self._make_bg() if hasattr(self, '_make_bg') else None
+
+        # Wait for the cue word
+        self.wait({count_time})
+
+        # Counter
+        counter = Integer(0, color="{count_color}").scale(3.0)
+        label = Text("{count_label}", color="{palette['text_dim']}", font_size=28)
+        label.next_to(counter, DOWN, buff=0.4)
+        self.add(counter, label)
+
+        # Animate count
+        count_dur = min(2.5, {duration} - {count_time} - 1.5)
+        self.play(
+            counter.animate.set_value({count_val}),
+            run_time=count_dur,
+            rate_func=rush_from,
+        )
+
+        # Glow pulse
+        glow = counter.copy().set_color(WHITE).set_opacity(0.5).scale(1.1)
+        self.play(FadeIn(glow, run_time=0.15))
+        self.play(FadeOut(glow, run_time=0.4))
+
+        # Hold
+        hold = max({duration} - {count_time} - count_dur - 2.0, 0.5)
+        self.wait(hold)
+        self.play(FadeOut(counter), FadeOut(label), run_time=0.8)
+'''
+
     def transition_sounds(self) -> dict[str, callable]:
         return {
             "imperial_chime": transition_imperial_chime,

@@ -35,14 +35,35 @@ class ThemeBase(ABC):
         Returns indented code lines. Empty string if no choreography.
         """
 
+    def _get_slide_builder(self, slide_type: str):
+        """Look up a bespoke scene builder method for a slide type.
+
+        Returns the method if found, None otherwise.
+        Subclasses register builders by defining methods named _build_{slide_type}_scene.
+        """
+        method_name = f"_build_{slide_type}_scene"
+        method = getattr(self, method_name, None)
+        if callable(method):
+            return method
+        return None
+
     def build_scene(self, clip: dict, duration: float, images_dir: str,
                     chapter_num: str = "00", chapter_title: str = "") -> str:
-        """Build complete Manim script for a clip using three layers.
+        """Build complete Manim script for a clip using slide type dispatch.
 
-        Composes: header + theme layer + content layer + choreography + ambient hold.
+        If the clip has a slide_type with a registered builder, dispatches to it.
+        Otherwise falls back to three-layer composition (theme + content + choreography).
         """
-        clip_id = clip["clip_id"]
         visuals = clip.get("visuals", {})
+        slide_type = visuals.get("slide_type", "")
+
+        # Dispatch to bespoke builder if available
+        builder = self._get_slide_builder(slide_type)
+        if builder:
+            return builder(clip, duration, images_dir, chapter_num, chapter_title)
+
+        # Three-layer composition fallback
+        clip_id = clip["clip_id"]
 
         # Layer 1: Theme elements
         elements = visuals.get("theme_elements",
