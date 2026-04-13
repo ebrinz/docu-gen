@@ -7,7 +7,7 @@ from pathlib import Path
 from docugen.config import load_config
 
 # Default font directory resolved from module location
-_FONT_DIR = str(Path(__file__).resolve().parent.parent.parent / "assets" / "fonts")
+_FONT_DIR = str(Path(__file__).resolve().parent.parent.parent.parent / "assets" / "fonts")
 
 
 def _escape(text: str) -> str:
