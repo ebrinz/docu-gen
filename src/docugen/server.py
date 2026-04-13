@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 from docugen.tools.init_project import init_project
 from docugen.tools.plan import extract_pdf_text, generate_plan
 from docugen.split import split_plan
+from docugen.align import align_plan
 from docugen.tools.narrate import generate_narration
 from docugen.tools.render import render_all
 from docugen.tools.score import generate_score
@@ -12,7 +13,7 @@ from docugen.tools.stitch import stitch_all
 
 mcp = FastMCP("docugen", instructions=(
     "Documentary generation pipeline. Use tools in order: "
-    "init -> plan -> split -> narrate -> render -> score -> stitch. "
+    "init -> plan -> split -> narrate -> align -> render -> score -> stitch. "
     "Review and edit clips.json between split and narrate to adjust "
     "emotion, pacing, and visual direction per clip."
 ))
@@ -70,6 +71,20 @@ def narrate(project_path: str) -> str:
         project_path: Path to project directory.
     """
     return generate_narration(project_path)
+
+
+@mcp.tool()
+def align(project_path: str) -> str:
+    """Align narration audio with text using Whisper word timestamps.
+
+    Runs Whisper on each clip WAV, cross-correlates with ground-truth
+    narration text, and saves word-level timestamps to clips.json.
+    Choreography primitives use these to sync visuals with speech.
+
+    Args:
+        project_path: Path to project directory.
+    """
+    return align_plan(project_path)
 
 
 @mcp.tool()
