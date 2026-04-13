@@ -4,7 +4,9 @@ from pathlib import Path
 import yaml
 
 DEFAULTS = {
+    "theme": "biopunk",
     "voice": {
+        "engine": "openai",
         "model": "tts-1-hd",
         "voice": "echo",
     },

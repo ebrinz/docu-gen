@@ -41,6 +41,18 @@ def test_load_config_defaults(tmp_path):
     assert cfg["drone"]["cue_freq"] == 220
 
 
+def test_load_config_has_theme_default(tmp_path):
+    (tmp_path / "config.yaml").write_text("title: Test\n")
+    cfg = load_config(tmp_path)
+    assert cfg["theme"] == "biopunk"
+
+
+def test_load_config_theme_override(tmp_path):
+    (tmp_path / "config.yaml").write_text("title: Test\ntheme: corporate\n")
+    cfg = load_config(tmp_path)
+    assert cfg["theme"] == "corporate"
+
+
 def test_load_config_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_config(tmp_path)
