@@ -527,14 +527,149 @@ def render_chapter(project_path: Path, chapter: dict, doc_title: str,
     return str(final_path)
 
 
-def render_all(project_path: str | Path) -> str:
-    """Render all chapters in plan.json to individual MP4 clips."""
+# ---------------------------------------------------------------------------
+# Clip-based rendering (new pipeline)
+# ---------------------------------------------------------------------------
+
+PACING_BUFFER = {"tight": 0.5, "normal": 1.5, "breathe": 3.5}
+
+
+def build_clip_script(clip: dict, theme_name: str, duration: float,
+                      images_dir: str, chapter_num: str = None,
+                      chapter_title: str = None) -> str:
+    """Generate a Manim script for a single clip using the theme."""
+    from docugen.themes import load_theme
+    theme = load_theme(theme_name)
+
+    vis_type = clip["visuals"]["type"]
+    assets = clip["visuals"].get("assets", [])
+    direction = clip["visuals"].get("direction", "")
+    clip_id = clip["clip_id"]
+
+    if vis_type == "chapter_card":
+        script = theme.chapter_card(
+            chapter_num or "00", chapter_title or "UNTITLED", duration)
+    elif vis_type == "image_reveal":
+        script = theme.image_reveal(assets, direction, duration, images_dir)
+    elif vis_type == "data_reveal":
+        script = theme.data_reveal(direction, duration)
+    elif vis_type == "animation":
+        script = theme.custom_animation(direction, duration, assets, images_dir)
+    else:  # blank
+        script = theme.idle_scene(duration)
+
+    # Rename the scene class to match clip_id
+    script = script.replace("class Scene_idle", f"class Scene_{clip_id}")
+    script = script.replace("class Scene_chapter_card", f"class Scene_{clip_id}")
+    script = script.replace("class Scene_image_reveal", f"class Scene_{clip_id}")
+    script = script.replace("class Scene_data_reveal", f"class Scene_{clip_id}")
+    script = script.replace("class Scene_custom_animation", f"class Scene_{clip_id}")
+
+    return script
+
+
+def render_clip(project_path: Path, clip: dict, theme_name: str,
+                chapter_num: str, chapter_title: str) -> str:
+    """Render a single clip to MP4."""
     project_path = Path(project_path)
     config = load_config(project_path)
+    clip_id = clip["clip_id"]
+    images_dir = project_path / "images"
+    clips_dir = project_path / "build" / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    media_dir = clips_dir / "media"
 
+    out_mp4 = clips_dir / f"{clip_id}.mp4"
+    if out_mp4.exists():
+        return str(out_mp4)
+
+    # Get duration from narration WAV + pacing buffer
+    wav_path = project_path / "build" / "narration" / f"{clip_id}.wav"
+    if wav_path.exists():
+        duration = _get_wav_duration(wav_path)
+    else:
+        duration = 3.0  # default for clips without narration (chapter cards)
+
+    pacing = clip.get("pacing", "normal")
+    duration += PACING_BUFFER.get(pacing, 1.5)
+
+    script = build_clip_script(
+        clip, theme_name, duration, str(images_dir),
+        chapter_num=chapter_num, chapter_title=chapter_title,
+    )
+    class_name = f"Scene_{clip_id}"
+    script_path = clips_dir / f"_scene_{clip_id}.py"
+    script_path.write_text(script)
+
+    fps = config["video"]["fps"]
+    quality = "-qh" if fps >= 60 else "-qm"
+
+    result = subprocess.run(
+        ["manim", quality, str(script_path.resolve()), class_name,
+         "--media_dir", str(media_dir.resolve()), "--format", "mp4"],
+        capture_output=True, text=True,
+    )
+
+    if result.returncode != 0:
+        script_path.unlink(missing_ok=True)
+        raise RuntimeError(f"Manim render failed for {clip_id}:\n{result.stderr[-500:]}")
+
+    output_files = list(media_dir.rglob(f"{class_name}.mp4"))
+    if not output_files:
+        script_path.unlink(missing_ok=True)
+        raise FileNotFoundError(f"Manim output not found for {class_name}")
+
+    output_files[0].rename(out_mp4)
+    script_path.unlink(missing_ok=True)
+    return str(out_mp4)
+
+
+def _render_from_clips(project_path: Path) -> str:
+    """Render all clips from clips.json."""
+    config = load_config(project_path)
+    clips_data = json.loads((project_path / "build" / "clips.json").read_text())
+    theme_name = clips_data.get("theme", config.get("theme", "biopunk"))
+
+    results = []
+    for i, chapter in enumerate(clips_data["chapters"]):
+        ch_num = f"{i:02d}"
+        ch_title = chapter.get("title", "").upper()
+        for clip in chapter["clips"]:
+            clip_id = clip["clip_id"]
+            out_mp4 = project_path / "build" / "clips" / f"{clip_id}.mp4"
+            if out_mp4.exists():
+                results.append(f"{clip_id}.mp4 (exists)")
+                continue
+            try:
+                render_clip(project_path, clip, theme_name, ch_num, ch_title)
+                results.append(f"{clip_id}.mp4 (rendered)")
+            except Exception as e:
+                results.append(f"{clip_id}.mp4 (FAILED: {e})")
+
+    return "Rendered clips:\n" + "\n".join(results)
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+def render_all(project_path: str | Path) -> str:
+    """Render video clips.
+
+    Uses clips.json if available (per-clip, theme-dispatched).
+    Falls back to plan.json (per-chapter, legacy).
+    """
+    project_path = Path(project_path)
+
+    clips_path = project_path / "build" / "clips.json"
+    if clips_path.exists():
+        return _render_from_clips(project_path)
+
+    # Legacy chapter-based rendering
+    config = load_config(project_path)
     plan_path = project_path / "build" / "plan.json"
     if not plan_path.exists():
-        raise FileNotFoundError("No plan.json found. Run 'plan' first.")
+        raise FileNotFoundError("No clips.json or plan.json found.")
 
     plan = json.loads(plan_path.read_text())
     narration_dir = project_path / "build" / "narration"
