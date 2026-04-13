@@ -534,6 +534,48 @@ def render_chapter(project_path: Path, chapter: dict, doc_title: str,
 PACING_BUFFER = {"tight": 0.5, "normal": 1.5, "breathe": 3.5}
 
 
+def _parse_direction(direction: str) -> tuple[str, dict]:
+    """Parse 'primitive_name(k=v, k=v)' into (name, params_dict).
+
+    Returns ("", {}) if direction doesn't match the pattern.
+    List values use bracket syntax: [a,b,c]
+    """
+    import re
+    match = re.match(r'(\w+)\((.+)\)$', direction.strip(), re.DOTALL)
+    if not match:
+        return ("", {})
+
+    name = match.group(1)
+    params_str = match.group(2)
+    params = {}
+
+    # Split on commas not inside brackets
+    parts = re.split(r',\s*(?![^\[]*\])', params_str)
+    for part in parts:
+        if '=' not in part:
+            continue
+        key, val = part.split('=', 1)
+        key = key.strip()
+        val = val.strip()
+        # Parse list values
+        if val.startswith('[') and val.endswith(']'):
+            val = [v.strip() for v in val[1:-1].split(',')]
+        # Parse numeric values
+        elif val.replace('.', '').replace('-', '').isdigit():
+            val = float(val) if '.' in val else int(val)
+        params[key] = val
+
+    return (name, params)
+
+
+# Animation primitive dispatch table
+ANIM_PRIMITIVES = {
+    "counter", "fingerprint_compare", "sonar_ring", "anchor_drop",
+    "dot_field", "remove_reveal", "dot_merge", "bar_chart",
+    "before_after", "organism_reveal",
+}
+
+
 def build_clip_script(clip: dict, theme_name: str, duration: float,
                       images_dir: str, chapter_num: str = None,
                       chapter_title: str = None) -> str:
@@ -554,16 +596,27 @@ def build_clip_script(clip: dict, theme_name: str, duration: float,
     elif vis_type == "data_reveal":
         script = theme.data_reveal(direction, duration)
     elif vis_type == "animation":
-        script = theme.custom_animation(direction, duration, assets, images_dir)
+        # Try to dispatch to a specific animation primitive
+        prim_name, params = _parse_direction(direction)
+        if prim_name and prim_name in ANIM_PRIMITIVES:
+            method = getattr(theme, f"anim_{prim_name}", None)
+            if method:
+                script = method(duration=duration, images_dir=images_dir, **params)
+            else:
+                script = theme.custom_animation(direction, duration, assets, images_dir)
+        else:
+            script = theme.custom_animation(direction, duration, assets, images_dir)
     else:  # blank
         script = theme.idle_scene(duration)
 
     # Rename the scene class to match clip_id
-    script = script.replace("class Scene_idle", f"class Scene_{clip_id}")
-    script = script.replace("class Scene_chapter_card", f"class Scene_{clip_id}")
-    script = script.replace("class Scene_image_reveal", f"class Scene_{clip_id}")
-    script = script.replace("class Scene_data_reveal", f"class Scene_{clip_id}")
-    script = script.replace("class Scene_custom_animation", f"class Scene_{clip_id}")
+    for scene_name in ["Scene_idle", "Scene_chapter_card", "Scene_image_reveal",
+                       "Scene_data_reveal", "Scene_custom_animation",
+                       "Scene_counter", "Scene_fingerprint_compare",
+                       "Scene_sonar_ring", "Scene_anchor_drop", "Scene_dot_field",
+                       "Scene_remove_reveal", "Scene_dot_merge", "Scene_bar_chart",
+                       "Scene_before_after", "Scene_organism_reveal"]:
+        script = script.replace(f"class {scene_name}", f"class Scene_{clip_id}")
 
     return script
 

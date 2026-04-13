@@ -41,3 +41,35 @@ class ThemeBase(ABC):
     @abstractmethod
     def chapter_layers(self) -> dict[str, callable]:
         """Return dict mapping layer names to drone layer generator functions."""
+
+    # -- Animation primitives (default implementations return idle scene) --
+
+    def anim_counter(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_fingerprint_compare(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_sonar_ring(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_anchor_drop(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_dot_field(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_remove_reveal(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_dot_merge(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_bar_chart(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_before_after(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
+
+    def anim_organism_reveal(self, duration, images_dir="", **kw) -> str:
+        return self.idle_scene(duration)
