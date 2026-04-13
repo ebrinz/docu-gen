@@ -15,6 +15,9 @@ media/
 *.wav
 *.mp4
 
+# Keep the default Chatterbox reference voice (trimmed 12s FLAC)
+!assets/robo.flac
+
 # macOS
 .DS_Store
 

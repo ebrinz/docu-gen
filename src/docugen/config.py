@@ -44,4 +44,25 @@ def load_config(project_path: str | Path) -> dict:
     with open(config_file) as f:
         raw = yaml.safe_load(f) or {}
 
-    return _deep_merge(DEFAULTS, raw)
+    config = _deep_merge(DEFAULTS, raw)
+
+    # Apply chatterbox defaults when engine is chatterbox
+    if config["voice"].get("engine") == "chatterbox":
+        cb_defaults = {
+            "ref_audio": "assets/robo.flac",
+            "exaggeration": 0.3,
+            "cfg_weight": 0.5,
+            "post_fx": {
+                "ring_freq": 30,
+                "formant_shift": 1.05,
+                "dry_wet": 0.2,
+            },
+        }
+        for key, val in cb_defaults.items():
+            if key not in config["voice"]:
+                config["voice"][key] = val
+            elif key == "post_fx" and isinstance(val, dict):
+                for pk, pv in val.items():
+                    config["voice"]["post_fx"].setdefault(pk, pv)
+
+    return config
