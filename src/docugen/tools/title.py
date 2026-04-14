@@ -162,16 +162,14 @@ class Scene_title(Scene):
         )
         self.remove(scan)
 
-        # Gentle particle drift during hold
-        hold = max({duration} - 7.0, 1.0)
+        # Hold title on screen — no fade out, next clip crossfades over
+        hold = max({duration} - 7.0, 2.0)
         drift_anims = []
         for p in particles:
             dx = random.uniform(-0.3, 0.3)
             dy = random.uniform(-0.2, 0.2)
             drift_anims.append(p.animate.shift([dx, dy, 0]))
         self.play(*drift_anims, run_time=hold, rate_func=linear)
-
-        self.play(FadeOut(title), FadeOut(subtitle), run_time=1.5)
 '''
 
 

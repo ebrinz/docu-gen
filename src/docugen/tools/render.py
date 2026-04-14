@@ -662,6 +662,10 @@ def render_clip(project_path: Path, clip: dict, theme_name: str,
     fps = config["video"]["fps"]
     quality = "-qh" if fps >= 60 else "-qm"
 
+    # Clean stale cached renders for this clip
+    for stale in media_dir.rglob(f"{class_name}.mp4"):
+        stale.unlink(missing_ok=True)
+
     result = subprocess.run(
         ["manim", quality, str(script_path.resolve()), class_name,
          "--media_dir", str(media_dir.resolve()), "--format", "mp4"],
@@ -672,7 +676,8 @@ def render_clip(project_path: Path, clip: dict, theme_name: str,
         script_path.unlink(missing_ok=True)
         raise RuntimeError(f"Manim render failed for {clip_id}:\n{result.stderr[-500:]}")
 
-    output_files = list(media_dir.rglob(f"{class_name}.mp4"))
+    output_files = sorted(media_dir.rglob(f"{class_name}.mp4"),
+                          key=lambda p: p.stat().st_mtime, reverse=True)
     if not output_files:
         script_path.unlink(missing_ok=True)
         raise FileNotFoundError(f"Manim output not found for {class_name}")
