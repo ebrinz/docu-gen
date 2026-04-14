@@ -108,7 +108,7 @@ def mix_audio(voice: np.ndarray, drone: np.ndarray, duck_db: float = -18,
     drone[:, 0] *= gain
     drone[:, 1] *= gain
 
-    drone_level = db_to_amp(-18)
+    drone_level = db_to_amp(-10)
     mixed = voice + drone * drone_level
 
     peak = np.max(np.abs(mixed)) + 1e-10

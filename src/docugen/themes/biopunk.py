@@ -925,8 +925,11 @@ def make_floating_bg(n=80, spread=7.0):
         }
 
         font_dir = str(Path(__file__).resolve().parent.parent.parent.parent / "assets" / "fonts")
-        return build_title_script(title_text, subtitle_text, reveal_style,
-                                  duration, colors, font_dir)
+        script = build_title_script(title_text, subtitle_text, reveal_style,
+                                    duration, colors, font_dir)
+        # Replace hardcoded Scene_title with the clip's actual class name
+        clip_id = clip["clip_id"]
+        return script.replace("Scene_title", f"Scene_{clip_id}")
 
     def _build_chapter_card_scene(self, clip, duration, images_dir,
                                   chapter_num, chapter_title):
