@@ -668,7 +668,8 @@ def render_clip(project_path: Path, clip: dict, theme_name: str,
 
     result = subprocess.run(
         ["manim", quality, str(script_path.resolve()), class_name,
-         "--media_dir", str(media_dir.resolve()), "--format", "mp4"],
+         "--media_dir", str(media_dir.resolve()), "--format", "mp4",
+         "--disable_caching"],
         capture_output=True, text=True,
     )
 
