@@ -933,144 +933,127 @@ def make_floating_bg(n=80, spread=7.0):
 
     def _build_chapter_card_scene(self, clip, duration, images_dir,
                                   chapter_num, chapter_title):
-        """Chapter card with imperial border and animated title."""
+        """Bold chapter card — big title, thin separator line."""
         clip_id = clip["clip_id"]
+        title_esc = chapter_title.replace('"', '\\\\"')
 
         return self.manim_header() + f'''
 
 class Scene_{clip_id}(Scene):
     def construct(self):
-        # Imperial border corners
-        corners = VGroup()
-        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
-            cx, cy = x_sign * 6.5, y_sign * 3.5
-            h = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
-                     color="{palette['gold']}", stroke_width=1.5)
-            v = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
-                     color="{palette['gold']}", stroke_width=1.5)
-            corners.add(h, v)
-        self.play(Create(corners, lag_ratio=0.05), run_time=0.8)
+        # Thin gold separator line
+        line = Line(LEFT * 4, RIGHT * 4, color=GOLD, stroke_width=2)
 
-        # Chapter number
-        num_text = Text("{chapter_num}", color="{palette['text_dim']}", font_size=28)
-        num_text.shift(UP * 0.8)
-        self.play(FadeIn(num_text, shift=DOWN * 0.2), run_time=0.5)
+        # Chapter title — LARGE, dominant
+        title = Text("{title_esc}", color=GOLD, font_size=72, weight=BOLD)
+        if title.width > 12:
+            title.scale(11.5 / title.width)
+        title.shift(DOWN * 0.3)
 
-        # Chapter title with throb
-        title_text = Text("{chapter_title}", color="{palette['gold']}", font_size=48)
-        if title_text.width > 11:
-            title_text.scale(10.5 / title_text.width)
-        title_text.shift(DOWN * 0.2)
-        self.play(FadeIn(title_text, shift=UP * 0.2), run_time=0.8)
+        # Chapter number label
+        label = Text("CHAPTER {chapter_num}", color=TEXT_DIM, font_size=24)
+        label.next_to(title, UP, buff=0.5)
+        line.next_to(label, UP, buff=0.3)
 
-        # Gentle pulse
-        self.play(title_text.animate.scale(1.03), run_time=0.4, rate_func=there_and_back)
+        self.play(GrowFromCenter(line), run_time=0.6)
+        self.play(FadeIn(label), run_time=0.4)
+        self.play(FadeIn(title, shift=UP * 0.3), run_time=0.8)
 
-        # Hold
-        hold = max({duration} - 3.0, 0.5)
-        self.wait(hold)
+        # Hold — title stays on screen
+        self.wait(max({duration} - 2.5, 0.5))
 
-        self.play(FadeOut(corners), FadeOut(num_text), FadeOut(title_text), run_time=0.8)
+        self.play(FadeOut(title), FadeOut(label), FadeOut(line), run_time=0.5)
 '''
 
     def _build_data_text_scene(self, clip, duration, images_dir,
                                chapter_num, chapter_title):
-        """Key text on screen with imperial border, synced to narration."""
+        """Big bold text dominating the frame. Text IS the visual."""
         clip_id = clip["clip_id"]
         visuals = clip.get("visuals", {})
         cue_words = visuals.get("cue_words", [])
         word_times = clip.get("word_times", [])
 
-        # Get display text from first cue_word params
+        # Get display text from cue_word params or clip text
         display_text = ""
-        show_time = 0.3
+        show_time = 0.2
         for cue in cue_words:
             if cue.get("event") == "show_text":
                 display_text = cue.get("params", {}).get("text", "")
                 idx = cue.get("at_index", 0)
                 if idx < len(word_times):
-                    show_time = word_times[idx].get("start", 0.3)
+                    show_time = word_times[idx].get("start", 0.2)
                 break
 
         if not display_text:
             display_text = clip.get("text", "")
 
-        # Escape for Manim
-        display_text = display_text.replace('"', '\\\\"').replace("\\n", "\\\\n")
+        display_text = display_text.replace('"', '\\\\"')
 
-        return self.manim_header() + f'''
+        # Split on · or \n for multi-line bullet treatment
+        has_bullets = "·" in display_text or "\\n" in display_text
+
+        if has_bullets:
+            # Multi-line: split and show as stacked items
+            items = [s.strip() for s in display_text.replace("\\n", "·").split("·") if s.strip()]
+            items_code = ""
+            for i, item in enumerate(items):
+                items_code += f'''
+        item_{i} = Text("{item}", color=TEXT_COL, font_size=48)
+        if item_{i}.width > 10:
+            item_{i}.scale(9.5 / item_{i}.width)
+        items.add(item_{i})'''
+
+            return self.manim_header() + f'''
 
 class Scene_{clip_id}(Scene):
     def construct(self):
-        # Imperial border corners
-        corners = VGroup()
-        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
-            cx, cy = x_sign * 6.5, y_sign * 3.5
-            h = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
-                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.4)
-            v = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
-                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.4)
-            corners.add(h, v)
-        self.add(corners)
-
-        # Wait for cue
         self.wait({show_time})
 
-        # Display text
-        text = Text("{display_text}", color="{palette['text']}", font_size=42)
-        if text.width > 11:
-            text.scale(10.5 / text.width)
-        self.play(FadeIn(text, shift=UP * 0.15), run_time=0.4)
+        items = VGroup()
+{items_code}
+        items.arrange(DOWN, buff=0.5, aligned_edge=LEFT)
+        items.move_to(ORIGIN)
 
-        # Hold
-        hold = max({duration} - {show_time} - 1.5, 0.3)
-        self.wait(hold)
+        for i, item in enumerate(items):
+            self.play(FadeIn(item, shift=RIGHT * 0.3), run_time=0.3)
+            self.wait(0.15)
 
-        self.play(FadeOut(text), run_time=0.6)
+        self.wait(max({duration} - {show_time} - len(items) * 0.45 - 1.0, 0.3))
+        self.play(FadeOut(items), run_time=0.5)
+'''
+        else:
+            # Single line: big and centered
+            return self.manim_header() + f'''
+
+class Scene_{clip_id}(Scene):
+    def construct(self):
+        self.wait({show_time})
+
+        text = Text("{display_text}", color=TEXT_COL, font_size=64, weight=BOLD)
+        if text.width > 12:
+            text.scale(11.5 / text.width)
+
+        self.play(FadeIn(text, shift=UP * 0.2), run_time=0.3)
+
+        # Hold for full clip duration
+        self.wait(max({duration} - {show_time} - 1.0, 0.3))
+
+        self.play(FadeOut(text), run_time=0.4)
 '''
 
     def _build_ambient_field_scene(self, clip, duration, images_dir,
                                    chapter_num, chapter_title):
-        """Particle field with theme background, no foreground content."""
+        """Minimal dark hold — just a brief breathing pause."""
         clip_id = clip["clip_id"]
 
         return self.manim_header() + f'''
-import random
 
 class Scene_{clip_id}(Scene):
     def construct(self):
-        # Floating particles
-        particles = VGroup()
-        for _ in range(100):
-            x = random.uniform(-7.5, 7.5)
-            y = random.uniform(-4.5, 4.5)
-            r = random.uniform(0.01, 0.04)
-            opacity = random.uniform(0.05, 0.25)
-            dot = Dot(point=[x, y, 0], radius=r, color="{palette['glow']}")
-            dot.set_opacity(opacity)
-            particles.add(dot)
-        self.add(particles)
-
-        # Imperial border (subtle)
-        corners = VGroup()
-        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
-            cx, cy = x_sign * 6.5, y_sign * 3.5
-            h = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
-                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.3)
-            v = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
-                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.3)
-            corners.add(h, v)
-        self.add(corners)
-
-        # Gentle drift
-        drift_anims = []
-        for p in particles:
-            dx = random.uniform(-0.4, 0.4)
-            dy = random.uniform(-0.3, 0.3)
-            drift_anims.append(p.animate.shift([dx, dy, 0]))
-        self.play(*drift_anims, run_time={duration - 0.5:.1f}, rate_func=linear)
-
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=0.5)
+        # Thin gold line as visual anchor
+        line = Line(LEFT * 2, RIGHT * 2, color=GOLD, stroke_width=1, stroke_opacity=0.3)
+        self.add(line)
+        self.wait({duration:.1f})
 '''
 
     def _build_photo_organism_scene(self, clip, duration, images_dir,
@@ -1199,35 +1182,31 @@ class Scene_{clip_id}(Scene):
 
 class Scene_{clip_id}(Scene):
     def construct(self):
-        # Theme background
-        bg = self._make_bg() if hasattr(self, '_make_bg') else None
-
-        # Wait for the cue word
+        # Wait for cue word
         self.wait({count_time})
 
-        # Counter
-        counter = Integer(0, color="{count_color}").scale(3.0)
-        label = Text("{count_label}", color="{palette['text_dim']}", font_size=28)
-        label.next_to(counter, DOWN, buff=0.4)
+        # BIG counter — dominates the frame
+        counter = Integer(0, color="{count_color}").scale(4.5)
+        label = Text("{count_label}", color=TEXT_DIM, font_size=36)
+        label.next_to(counter, DOWN, buff=0.5)
         self.add(counter, label)
 
         # Animate count
         count_dur = min(2.5, {duration} - {count_time} - 1.5)
         self.play(
             counter.animate.set_value({count_val}),
-            run_time=count_dur,
+            run_time=max(count_dur, 0.5),
             rate_func=rush_from,
         )
 
-        # Glow pulse
-        glow = counter.copy().set_color(WHITE).set_opacity(0.5).scale(1.1)
-        self.play(FadeIn(glow, run_time=0.15))
-        self.play(FadeOut(glow, run_time=0.4))
+        # Brief flash on completion
+        self.play(counter.animate.scale(1.08), run_time=0.15)
+        self.play(counter.animate.scale(1/1.08), run_time=0.3)
 
-        # Hold
-        hold = max({duration} - {count_time} - count_dur - 2.0, 0.5)
+        # Hold — number stays on screen
+        hold = max({duration} - {count_time} - count_dur - 1.5, 0.3)
         self.wait(hold)
-        self.play(FadeOut(counter), FadeOut(label), run_time=0.8)
+        self.play(FadeOut(counter), FadeOut(label), run_time=0.5)
 '''
 
     def transition_sounds(self) -> dict[str, callable]:
