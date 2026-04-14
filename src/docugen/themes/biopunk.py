@@ -890,6 +890,186 @@ def make_floating_bg(n=80, spread=7.0):
 
     # ── Bespoke slide-type builders ──────────────────────────────
 
+    def _build_title_scene(self, clip, duration, images_dir,
+                           chapter_num, chapter_title):
+        """Delegate to the title tool's script builder."""
+        from docugen.tools.title import build_title_script
+        import json
+        from pathlib import Path
+
+        visuals = clip.get("visuals", {})
+        params = visuals.get("params", {})
+        reveal_style = params.get("reveal_style", "particle")
+
+        # Read title/subtitle from production plan
+        build_dir = Path(images_dir).parent / "build"
+        plan_path = build_dir / "plan.json"
+        if plan_path.exists():
+            plan = json.loads(plan_path.read_text())
+            meta = plan.get("meta", plan)
+            title_text = meta.get("title", "Untitled")
+            subtitle_text = meta.get("subtitle", "")
+            plan_palette = meta.get("color_palette", {})
+        else:
+            title_text = "Untitled"
+            subtitle_text = ""
+            plan_palette = {}
+
+        colors = {
+            "bg": plan_palette.get("bg", palette["bg"]),
+            "accent_gold": plan_palette.get("accent_gold", palette["gold"]),
+            "accent_cyan": plan_palette.get("accent_cyan", palette["cyan"]),
+            "glow": palette["glow"],
+            "grid": palette["grid"],
+            "text": plan_palette.get("text", palette["text"]),
+        }
+
+        font_dir = str(Path(__file__).resolve().parent.parent.parent.parent / "assets" / "fonts")
+        return build_title_script(title_text, subtitle_text, reveal_style,
+                                  duration, colors, font_dir)
+
+    def _build_chapter_card_scene(self, clip, duration, images_dir,
+                                  chapter_num, chapter_title):
+        """Chapter card with imperial border and animated title."""
+        clip_id = clip["clip_id"]
+
+        return self.manim_header() + f'''
+
+class Scene_{clip_id}(Scene):
+    def construct(self):
+        # Imperial border corners
+        corners = VGroup()
+        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
+            cx, cy = x_sign * 6.5, y_sign * 3.5
+            h = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
+                     color="{palette['gold']}", stroke_width=1.5)
+            v = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
+                     color="{palette['gold']}", stroke_width=1.5)
+            corners.add(h, v)
+        self.play(Create(corners, lag_ratio=0.05), run_time=0.8)
+
+        # Chapter number
+        num_text = Text("{chapter_num}", color="{palette['text_dim']}", font_size=28)
+        num_text.shift(UP * 0.8)
+        self.play(FadeIn(num_text, shift=DOWN * 0.2), run_time=0.5)
+
+        # Chapter title with throb
+        title_text = Text("{chapter_title}", color="{palette['gold']}", font_size=48)
+        if title_text.width > 11:
+            title_text.scale(10.5 / title_text.width)
+        title_text.shift(DOWN * 0.2)
+        self.play(FadeIn(title_text, shift=UP * 0.2), run_time=0.8)
+
+        # Gentle pulse
+        self.play(title_text.animate.scale(1.03), run_time=0.4, rate_func=there_and_back)
+
+        # Hold
+        hold = max({duration} - 3.0, 0.5)
+        self.wait(hold)
+
+        self.play(FadeOut(corners), FadeOut(num_text), FadeOut(title_text), run_time=0.8)
+'''
+
+    def _build_data_text_scene(self, clip, duration, images_dir,
+                               chapter_num, chapter_title):
+        """Key text on screen with imperial border, synced to narration."""
+        clip_id = clip["clip_id"]
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        word_times = clip.get("word_times", [])
+
+        # Get display text from first cue_word params
+        display_text = ""
+        show_time = 0.3
+        for cue in cue_words:
+            if cue.get("event") == "show_text":
+                display_text = cue.get("params", {}).get("text", "")
+                idx = cue.get("at_index", 0)
+                if idx < len(word_times):
+                    show_time = word_times[idx].get("start", 0.3)
+                break
+
+        if not display_text:
+            display_text = clip.get("text", "")
+
+        # Escape for Manim
+        display_text = display_text.replace('"', '\\\\"').replace("\\n", "\\\\n")
+
+        return self.manim_header() + f'''
+
+class Scene_{clip_id}(Scene):
+    def construct(self):
+        # Imperial border corners
+        corners = VGroup()
+        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
+            cx, cy = x_sign * 6.5, y_sign * 3.5
+            h = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
+                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.4)
+            v = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
+                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.4)
+            corners.add(h, v)
+        self.add(corners)
+
+        # Wait for cue
+        self.wait({show_time})
+
+        # Display text
+        text = Text("{display_text}", color="{palette['text']}", font_size=42)
+        if text.width > 11:
+            text.scale(10.5 / text.width)
+        self.play(FadeIn(text, shift=UP * 0.15), run_time=0.4)
+
+        # Hold
+        hold = max({duration} - {show_time} - 1.5, 0.3)
+        self.wait(hold)
+
+        self.play(FadeOut(text), run_time=0.6)
+'''
+
+    def _build_ambient_field_scene(self, clip, duration, images_dir,
+                                   chapter_num, chapter_title):
+        """Particle field with theme background, no foreground content."""
+        clip_id = clip["clip_id"]
+
+        return self.manim_header() + f'''
+import random
+
+class Scene_{clip_id}(Scene):
+    def construct(self):
+        # Floating particles
+        particles = VGroup()
+        for _ in range(100):
+            x = random.uniform(-7.5, 7.5)
+            y = random.uniform(-4.5, 4.5)
+            r = random.uniform(0.01, 0.04)
+            opacity = random.uniform(0.05, 0.25)
+            dot = Dot(point=[x, y, 0], radius=r, color="{palette['glow']}")
+            dot.set_opacity(opacity)
+            particles.add(dot)
+        self.add(particles)
+
+        # Imperial border (subtle)
+        corners = VGroup()
+        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
+            cx, cy = x_sign * 6.5, y_sign * 3.5
+            h = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
+                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.3)
+            v = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
+                     color="{palette['gold']}", stroke_width=1.5, stroke_opacity=0.3)
+            corners.add(h, v)
+        self.add(corners)
+
+        # Gentle drift
+        drift_anims = []
+        for p in particles:
+            dx = random.uniform(-0.4, 0.4)
+            dy = random.uniform(-0.3, 0.3)
+            drift_anims.append(p.animate.shift([dx, dy, 0]))
+        self.play(*drift_anims, run_time={duration - 0.5:.1f}, rate_func=linear)
+
+        self.play(*[FadeOut(m) for m in self.mobjects], run_time=0.5)
+'''
+
     def _build_photo_organism_scene(self, clip, duration, images_dir,
                                     chapter_num, chapter_title):
         """Photo inset with imperial border frame and animated pointer labels."""

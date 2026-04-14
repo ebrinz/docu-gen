@@ -65,6 +65,40 @@ class ThemeBase(ABC):
         # Three-layer composition fallback
         clip_id = clip["clip_id"]
 
+        # Bridge: convert new direction format to three-layer format
+        # New format has: slide_type, assets, cue_words, layout, transition_*
+        # Old format has: theme_elements, content.assets, choreography.type/params
+        if slide_type and "theme_elements" not in visuals:
+            # Map slide_type to choreography type for legacy renderer
+            _SLIDE_TO_CHOREO = {
+                "title": "chapter_card",
+                "chapter_card": "chapter_card",
+                "svg_reveal": "",
+                "counter_sync": "counter",
+                "bar_chart_build": "bar_chart",
+                "before_after": "before_after",
+                "dot_merge": "dot_merge",
+                "remove_reveal": "remove_reveal",
+                "data_text": "data_text",
+                "ambient_field": "",
+            }
+
+            # Extract params from first cue_word if available
+            cue_words = visuals.get("cue_words", [])
+            choreo_params = {}
+            for cue in cue_words:
+                choreo_params.update(cue.get("params", {}))
+
+            choreo_type = _SLIDE_TO_CHOREO.get(slide_type, "")
+            assets = visuals.get("assets", [])
+
+            # Rebuild visuals in old format for the three-layer renderer
+            visuals = {
+                "theme_elements": ["hex_grid", "imperial_border", "floating_bg"],
+                "content": {"assets": assets, "placement": visuals.get("layout", "center")},
+                "choreography": {"type": choreo_type, "params": choreo_params},
+            }
+
         # Layer 1: Theme elements
         elements = visuals.get("theme_elements",
                                ["hex_grid", "imperial_border", "floating_bg"])
