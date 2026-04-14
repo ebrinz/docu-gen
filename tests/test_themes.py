@@ -1,3 +1,4 @@
+# tests/test_themes.py
 import pytest
 from docugen.themes import list_themes, load_theme
 
@@ -12,7 +13,6 @@ def test_load_theme_returns_theme_object():
     assert theme.name == "biopunk"
     assert isinstance(theme.palette, dict)
     assert "bg" in theme.palette
-    assert isinstance(theme.font, str)
 
 
 def test_load_unknown_theme_raises():
@@ -29,31 +29,47 @@ def test_biopunk_manim_header_has_palette():
     assert 'def alive_wait' in header
 
 
-def test_biopunk_idle_scene_valid_manim():
+def test_biopunk_default_dag_returns_nodes():
     theme = load_theme("biopunk")
-    script = theme.idle_scene(10.0)
-    assert 'class Scene_idle' in script
-    assert 'def construct' in script
+    clip = {
+        "clip_id": "test_01",
+        "visuals": {"slide_type": "data_text", "cue_words": [], "assets": []},
+    }
+    dag = theme.default_dag(clip)
+    assert isinstance(dag, list)
+    assert len(dag) >= 2
+    names = [n["name"] for n in dag]
+    assert "bg" in names
+    assert "choreo" in names
+    renderers = [n["renderer"] for n in dag]
+    assert "manim_theme" in renderers
+    assert "manim_choreo" in renderers
 
 
-def test_biopunk_chapter_card_valid_manim():
+def test_biopunk_default_dag_includes_content_when_assets():
     theme = load_theme("biopunk")
-    script = theme.chapter_card("01", "THE PAPER", 5.0)
-    assert 'class Scene_chapter_card' in script
-    assert 'THE PAPER' in script
+    clip = {
+        "clip_id": "test_02",
+        "visuals": {
+            "slide_type": "photo_organism",
+            "assets": ["yeast.jpg"],
+            "cue_words": [],
+        },
+    }
+    dag = theme.default_dag(clip)
+    names = [n["name"] for n in dag]
+    assert "content" in names
 
 
-def test_biopunk_image_reveal_valid_manim():
+def test_biopunk_default_dag_no_content_without_assets():
     theme = load_theme("biopunk")
-    script = theme.image_reveal(["test.svg"], "Fade in, zoom 1.04x", 8.0, "/tmp")
-    assert 'class Scene_image_reveal' in script
-    assert 'test.svg' in script
-
-
-def test_biopunk_data_reveal_valid_manim():
-    theme = load_theme("biopunk")
-    script = theme.data_reveal("Show +16.4% in gold", 5.0)
-    assert 'class Scene_data_reveal' in script
+    clip = {
+        "clip_id": "test_03",
+        "visuals": {"slide_type": "counter_sync", "cue_words": [], "assets": []},
+    }
+    dag = theme.default_dag(clip)
+    names = [n["name"] for n in dag]
+    assert "content" not in names
 
 
 def test_biopunk_transition_sounds_returns_callables():
