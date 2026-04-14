@@ -61,3 +61,66 @@ def test_content_hash_changes_on_node_change():
     h2 = content_hash({"name": "bg", "renderer": "manim_theme", "elements": ["hex_grid", "particles"]},
                        clip, input_hashes={})
     assert h1 != h2
+
+
+from unittest.mock import patch, MagicMock
+from docugen.renderers.manim_fused import build_fused_script
+
+
+def test_build_fused_script_has_layers():
+    clip = {
+        "clip_id": "intro_01",
+        "text": "hello world",
+        "word_times": [{"word": "hello", "start": 0.0, "end": 0.5},
+                       {"word": "world", "start": 0.5, "end": 1.0}],
+        "visuals": {
+            "slide_type": "data_text",
+            "cue_words": [{"event": "show_text", "at_index": 0,
+                           "params": {"text": "Hello World"}}],
+            "assets": [],
+        },
+        "timing": {"clip_duration": 5.0},
+    }
+    nodes = [
+        {"name": "bg", "renderer": "manim_theme",
+         "elements": ["hex_grid", "imperial_border", "floating_bg"]},
+        {"name": "choreo", "renderer": "manim_choreo", "refs": ["bg"]},
+    ]
+    from docugen.themes import load_theme
+    theme = load_theme("biopunk")
+    script = build_fused_script(nodes, clip, "/fake/images", theme, duration=5.0)
+
+    assert "class Scene_intro_01" in script
+    assert "self.layers" in script
+    assert "make_hex_grid" in script
+    assert "def construct" in script
+
+
+def test_build_fused_script_with_content():
+    clip = {
+        "clip_id": "ch8_01",
+        "text": "the sponge",
+        "word_times": [{"word": "the", "start": 0.0, "end": 0.3},
+                       {"word": "sponge", "start": 0.3, "end": 0.8}],
+        "visuals": {
+            "slide_type": "photo_organism",
+            "cue_words": [{"event": "show_photo", "at_index": 1, "params": {}}],
+            "assets": ["sponge.jpg"],
+            "layout": "left",
+        },
+        "timing": {"clip_duration": 8.0},
+    }
+    nodes = [
+        {"name": "bg", "renderer": "manim_theme",
+         "elements": ["hex_grid", "imperial_border", "floating_bg"]},
+        {"name": "content", "renderer": "static_asset",
+         "asset": "sponge.jpg", "layout": "left"},
+        {"name": "choreo", "renderer": "manim_choreo", "refs": ["bg", "content"]},
+    ]
+    from docugen.themes import load_theme
+    theme = load_theme("biopunk")
+    script = build_fused_script(nodes, clip, "/fake/images", theme, duration=8.0)
+
+    assert "self.layers" in script
+    assert "self.layers['content']" in script
+    assert "sponge.jpg" in script
