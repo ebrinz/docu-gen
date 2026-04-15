@@ -219,3 +219,15 @@ def test_audio_synth_registered():
     discover_renderers()
     fn = get_renderer("audio_synth")
     assert callable(fn)
+
+def test_ffmpeg_composite_registered():
+    from docugen.renderers import discover_renderers, get_renderer
+    discover_renderers()
+    fn = get_renderer("ffmpeg_composite")
+    assert callable(fn)
+
+def test_ffmpeg_post_registered():
+    from docugen.renderers import discover_renderers, get_renderer
+    discover_renderers()
+    fn = get_renderer("ffmpeg_post")
+    assert callable(fn)
