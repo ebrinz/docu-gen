@@ -223,10 +223,20 @@ def render_node(node, inputs, clip, project_path):
                     "curve": span["curve"],
                 })
 
+    # Title slide special treatment — tension build + chime hit
+    slide_type = visuals.get("slide_type", "")
+    if slide_type == "title" and not clip_spans:
+        # Tension build for 70% of duration, then sting hit
+        reveal_time = total_duration * 0.7
+        clip_spans = [
+            {"start": 0.0, "duration": reveal_time, "audio": "tension_build", "curve": "ramp_up"},
+            {"start": reveal_time, "duration": 0.4, "audio": "sting", "curve": "spike"},
+            {"start": reveal_time + 0.1, "duration": 1.5, "audio": "trace_hum", "curve": "sustain"},
+        ]
+
     # If no cue sheet spans, derive from cue_words directly
     if not clip_spans:
         from docugen.themes.slides import SLIDE_REGISTRY
-        slide_type = visuals.get("slide_type", "")
         registry_entry = SLIDE_REGISTRY.get(slide_type, {})
         span_templates = registry_entry.get("spans", [])
 

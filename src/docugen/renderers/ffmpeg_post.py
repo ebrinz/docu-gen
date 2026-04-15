@@ -6,7 +6,7 @@ from pathlib import Path
 from docugen.renderers import register_renderer
 
 FILTER_PRESETS = {
-    "bloom": "gblur=sigma=20[bloom];[0:v][bloom]blend=all_mode=screen:all_opacity=0.15",
+    "bloom": "split[main][glow];[glow]gblur=sigma=15,eq=brightness=0.08[g];[main][g]blend=all_mode=screen:all_opacity=0.2",
     "vignette": "vignette=PI/5",
     "warm_grade": "colorbalance=rs=0.05:gs=-0.02:bs=-0.05",
     "cool_grade": "colorbalance=rs=-0.03:gs=0.02:bs=0.05",
@@ -54,7 +54,12 @@ def render_node(node, inputs, clip, project_path):
             if part in inputs:
                 cmd.extend(["-i", str(inputs[part])])
     if filter_parts:
-        cmd.extend(["-vf", ",".join(filter_parts)])
+        combined = ",".join(filter_parts)
+        # Use -filter_complex for filters that use stream splitting (bloom etc.)
+        if "split" in combined or "[" in combined:
+            cmd.extend(["-filter_complex", combined])
+        else:
+            cmd.extend(["-vf", combined])
     cmd.append(str(out_path))
 
     result = subprocess.run(cmd, capture_output=True, text=True)

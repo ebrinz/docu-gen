@@ -579,7 +579,7 @@ def make_floating_bg(n=80, spread=7.0):
 
     # Post-processing filters by slide type — tasteful, not overwhelming
     _POST_FILTERS = {
-        "title": ["vignette"],             # dramatic framing for opening
+        "title": ["bloom", "vignette"],     # cinematic glow + dramatic framing
         "chapter_card": ["vignette"],       # frame the transition
         "ambient_field": ["vignette"],      # moody breathing room
         "photo_organism": ["sharpen"],      # make the photo pop
