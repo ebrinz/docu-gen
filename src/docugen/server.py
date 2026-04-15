@@ -65,16 +65,21 @@ def split(project_path: str) -> str:
 
 @mcp.tool()
 def narrate(project_path: str) -> str:
-    """Generate TTS narration audio for each clip.
+    """Generate TTS narration audio for each clip, then re-align word timestamps.
 
     Reads build/clips.json, creates build/narration/{clip_id}.wav
     with per-clip emotion. Converts numbers to words and consolidates
     short clips before synthesis. Skips existing files.
 
+    After narration, automatically runs Whisper alignment to update
+    word_times in clips.json — this keeps visual cues synced to speech.
+
     Args:
         project_path: Path to project directory.
     """
-    return generate_narration(project_path)
+    narr_result = generate_narration(project_path)
+    align_result = align_plan(project_path)
+    return narr_result + "\n\n" + align_result
 
 
 @mcp.tool()
