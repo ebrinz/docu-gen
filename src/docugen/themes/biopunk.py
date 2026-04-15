@@ -577,10 +577,19 @@ def make_floating_bg(n=80, spread=7.0):
 
         return "\n".join(lines)
 
+    # Post-processing filters by slide type — tasteful, not overwhelming
+    _POST_FILTERS = {
+        "title": ["vignette"],             # dramatic framing for opening
+        "chapter_card": ["vignette"],       # frame the transition
+        "ambient_field": ["vignette"],      # moody breathing room
+        "photo_organism": ["sharpen"],      # make the photo pop
+    }
+
     def default_dag(self, clip: dict) -> list[dict]:
         visuals = clip.get("visuals", {})
         slide_type = visuals.get("slide_type", "")
         assets = visuals.get("assets", [])
+        cue_words = visuals.get("cue_words", [])
 
         nodes = [
             {"name": "bg", "renderer": "manim_theme",
@@ -605,14 +614,25 @@ def make_floating_bg(n=80, spread=7.0):
             })
             fused_inputs = "bg+choreo"
 
+        # Audio cues node — generates synth sounds keyed to cue events
+        if cue_words:
+            nodes.append({
+                "name": "audio_cues", "renderer": "audio_synth",
+            })
+
         nodes.append({
             "name": "composite", "renderer": "ffmpeg_composite",
             "inputs": [fused_inputs],
         })
+
+        # Post-processing — slide-type-specific filters
+        filters = self._POST_FILTERS.get(slide_type, [])
+        audio_inputs = ["audio_cues"] if cue_words else []
         nodes.append({
             "name": "post", "renderer": "ffmpeg_post",
             "inputs": ["composite"],
-            "filters": [],
+            "filters": filters,
+            "audio": audio_inputs,
         })
 
         return nodes
