@@ -206,3 +206,16 @@ def test_biopunk_choreo_organism_uses_layers():
     code = theme.render_choreography(clip, 8.0, "/fake")
     assert "self.layers" in code
     assert "Haliclona" in code
+
+
+def test_static_asset_registered():
+    from docugen.renderers import discover_renderers, get_renderer
+    discover_renderers()
+    fn = get_renderer("static_asset")
+    assert callable(fn)
+
+def test_audio_synth_registered():
+    from docugen.renderers import discover_renderers, get_renderer
+    discover_renderers()
+    fn = get_renderer("audio_synth")
+    assert callable(fn)
