@@ -71,13 +71,17 @@ def _write_hash(hash_path: Path, h: str) -> None:
 
 
 def _detect_fusion_groups(nodes: list[dict]) -> list[list[dict]]:
-    """Detect groups of manim nodes that can be fused into single scenes."""
-    manim_types = {"manim_theme", "manim_choreo"}
+    """Detect groups of manim nodes that can be fused into single scenes.
+
+    manim_theme, manim_choreo, and static_asset nodes are all fusable
+    into a single Manim Scene (static_asset gets inlined as ImageMobject).
+    """
+    fusable_types = {"manim_theme", "manim_choreo", "static_asset"}
     groups: list[list[dict]] = []
     current_group: list[dict] = []
 
     for node in nodes:
-        if node["renderer"] in manim_types:
+        if node["renderer"] in fusable_types:
             current_group.append(node)
         else:
             if current_group:

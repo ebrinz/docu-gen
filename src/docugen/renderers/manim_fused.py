@@ -25,6 +25,7 @@ def build_fused_script(
     placement = visuals.get("layout", "center")
 
     script = theme.manim_header()
+    script += "\nimport random\n"
     script += f"\n\nclass Scene_{clip_id}(Scene):\n"
     script += "    def construct(self):\n"
     script += "        self.layers = {}\n\n"
@@ -46,7 +47,11 @@ def build_fused_script(
             if "imperial_border" in elements:
                 exports.append("'border': border")
             if exports:
-                script += f"        self.layers['{name}'] = {{{', '.join(exports)}}}\n\n"
+                script += f"        self.layers['{name}'] = {{{', '.join(exports)}}}\n"
+            # Alias for title tool compatibility — it references 'particles' not 'bg'
+            if "floating_bg" in elements:
+                script += "        particles = bg\n"
+            script += "\n"
 
         elif renderer_type == "static_asset":
             asset = node.get("asset", assets[0] if assets else "")
@@ -54,26 +59,14 @@ def build_fused_script(
             content_code = theme.render_content_layer(
                 [asset] if asset else [], layout, images_dir)
             if content_code:
-                script += content_code + "\n"
+                # Pre-init variable so it exists even if asset loading fails
                 var = "asset_0"
+                script += f"        {var} = None\n"
+                script += content_code + "\n"
                 script += f"        self.layers['{name}'] = {{'{var}': {var}}}\n\n"
 
         elif renderer_type == "manim_choreo":
-            # Detect whether theme uses the new (clip, duration, images_dir) signature
-            # or the old (choreo_type, params, duration, images_dir) signature.
-            # Task 5 will rewrite biopunk to the new signature; until then we bridge.
-            import inspect
-            sig = inspect.signature(theme.render_choreography)
-            n_params = len(sig.parameters)
-            if n_params == 3:
-                choreo_code = theme.render_choreography(clip, duration, images_dir)
-            else:
-                # Old signature: (choreo_type, params, duration, images_dir)
-                # Extract the slide_type string so the dict isn't passed as a key;
-                # most clip types won't be in the old method_map so this safely returns "".
-                slide_type = clip.get("visuals", {}).get("slide_type", "")
-                params = clip.get("visuals", {}).get("cue_words", [{}])[0].get("params", {})
-                choreo_code = theme.render_choreography(slide_type, params, duration, images_dir)
+            choreo_code = theme.render_choreography(clip, duration, images_dir)
             script += choreo_code + "\n"
 
     hold_time = max(duration * 0.1, 0.3)

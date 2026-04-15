@@ -563,7 +563,7 @@ def make_floating_bg(n=80, spread=7.0):
                 lines.append(f"            {var}.move_to({pos})")
                 lines.append(f"            self.play(FadeIn({var}), run_time=1.5)")
                 lines.append(f"        except Exception:")
-                lines.append(f"            pass")
+                lines.append(f"            {var} = Dot(ORIGIN, radius=0.01).set_opacity(0)")
             else:
                 lines.append(f"        try:")
                 lines.append(f"            {var} = ImageMobject(\"{path}\")")
@@ -573,7 +573,7 @@ def make_floating_bg(n=80, spread=7.0):
                 lines.append(f"            self.play(FadeIn({var}), run_time=1.5)")
                 lines.append(f"            self.play({var}.animate.scale(1.04), run_time=3.0, rate_func=linear)")
                 lines.append(f"        except Exception:")
-                lines.append(f"            pass")
+                lines.append(f"            {var} = Dot(ORIGIN, radius=0.01).set_opacity(0)")
 
         return "\n".join(lines)
 
@@ -694,16 +694,14 @@ def make_floating_bg(n=80, spread=7.0):
         if count_label:
             label_code = f'\n        lbl = Text("{count_label}", color=TEXT_DIM, font_size=36)\n        lbl.next_to(counter, DOWN, buff=0.5)\n        self.play(FadeIn(lbl), run_time=0.5)'
         return f'''        # Counter sync: wait for cue at {count_time:.2f}s, count to {count_val}
-        self.wait({count_time})
-        counter = Integer(0, color="{count_color}").scale(4.5)
+        if {count_time} > 0.05:
+            self.wait({count_time})
+        counter = Text("{count_val:,}", color="{count_color}", font_size=144, weight=BOLD)
+        counter.set_opacity(0)
         self.add(counter)
 {label_code}
         count_dur = min(2.5, {duration} - {count_time} - 1.5)
-        self.play(
-            counter.animate.set_value({count_val}),
-            run_time=max(count_dur, 0.5),
-            rate_func=rush_from,
-        )
+        self.play(counter.animate.set_opacity(1.0), run_time=max(count_dur, 0.5), rate_func=rush_from)
         self.play(counter.animate.scale(1.08), run_time=0.15)
         self.play(counter.animate.scale(1/1.08), run_time=0.3)
         hold = max({duration} - {count_time} - count_dur - 1.5, 0.3)
@@ -1031,15 +1029,17 @@ def make_floating_bg(n=80, spread=7.0):
                 break
         if not display_text:
             display_text = clip.get("text", "")
-        display_text = display_text.replace('"', '\\"')
+        display_text = display_text.replace('"', '\\"').replace("\n", " ")
         has_bullets = "\u00b7" in display_text or "\\n" in display_text
         if has_bullets:
             items = [s.strip() for s in display_text.replace("\\n", "\u00b7").split("\u00b7") if s.strip()]
             items_code = ""
             for i, item in enumerate(items):
-                items_code += f'\n        item_{i} = Text("{item}", color=TEXT_COL, font_size=48)\n        if item_{i}.width > 10:\n            item_{i}.scale(9.5 / item_{i}.width)\n        items.add(item_{i})'
+                item_safe = item.replace('"', '\\"').replace("\n", " ")
+                items_code += f'\n        item_{i} = Text("{item_safe}", color=TEXT_COL, font_size=48)\n        if item_{i}.width > 10:\n            item_{i}.scale(9.5 / item_{i}.width)\n        items.add(item_{i})'
             return f'''        # Data text (multi-line): show at {show_time:.2f}s
-        self.wait({show_time})
+        if {show_time} > 0.05:
+            self.wait({show_time})
         items = VGroup()
 {items_code}
         items.arrange(DOWN, buff=0.5, aligned_edge=LEFT)
@@ -1050,7 +1050,8 @@ def make_floating_bg(n=80, spread=7.0):
         alive_wait(self, max({duration} - {show_time} - len(items) * 0.45 - 1.0, 0.3), particles=bg)'''
         else:
             return f'''        # Data text: show at {show_time:.2f}s
-        self.wait({show_time})
+        if {show_time} > 0.05:
+            self.wait({show_time})
         txt = Text("{display_text}", color=TEXT_COL, font_size=64, weight=BOLD)
         if txt.width > 12:
             txt.scale(11.5 / txt.width)
@@ -1107,11 +1108,19 @@ def make_floating_bg(n=80, spread=7.0):
         lines = full_script.split("\n")
         body_lines = []
         in_body = False
+        # Skip theme setup lines — the fused renderer's theme layer handles these
+        skip_patterns = ("hex_grid", "floating_particles", "imperial_border",
+                         "make_hex_grid", "make_floating_bg", "grid =", "particles =",
+                         "border =", "self.add(grid", "self.add(particles",
+                         "self.add(border", "self.play(Create(border")
         for line in lines:
             if "def construct(self):" in line:
                 in_body = True
                 continue
             if in_body:
+                stripped = line.strip()
+                if any(p in stripped for p in skip_patterns):
+                    continue
                 body_lines.append(line)
         return "\n".join(body_lines) if body_lines else "        pass"
 
