@@ -577,36 +577,83 @@ def make_floating_bg(n=80, spread=7.0):
 
         return "\n".join(lines)
 
-    def render_choreography(self, choreo_type: str, params: dict,
-                            duration: float, images_dir: str) -> str:
-        """Return Manim code for animation choreography."""
-        if not choreo_type:
-            return ""
+    def default_dag(self, clip: dict) -> list[dict]:
+        visuals = clip.get("visuals", {})
+        slide_type = visuals.get("slide_type", "")
+        assets = visuals.get("assets", [])
 
-        # Dispatch to primitive methods
+        nodes = [
+            {"name": "bg", "renderer": "manim_theme",
+             "elements": ["hex_grid", "imperial_border", "floating_bg"]},
+        ]
+
+        if assets:
+            nodes.append({
+                "name": "content", "renderer": "static_asset",
+                "asset": assets[0],
+                "layout": visuals.get("layout", "center"),
+            })
+            nodes.append({
+                "name": "choreo", "renderer": "manim_choreo",
+                "refs": ["bg", "content"],
+            })
+            fused_inputs = "bg+content+choreo"
+        else:
+            nodes.append({
+                "name": "choreo", "renderer": "manim_choreo",
+                "refs": ["bg"],
+            })
+            fused_inputs = "bg+choreo"
+
+        nodes.append({
+            "name": "composite", "renderer": "ffmpeg_composite",
+            "inputs": [fused_inputs],
+        })
+        nodes.append({
+            "name": "post", "renderer": "ffmpeg_post",
+            "inputs": ["composite"],
+            "filters": [],
+        })
+
+        return nodes
+
+    def render_choreography(self, clip: dict, duration: float,
+                            images_dir: str) -> str:
+        """Return Manim code for animation choreography."""
+        visuals = clip.get("visuals", {})
+        slide_type = visuals.get("slide_type", "")
+
         method_map = {
             "chapter_card": self._choreo_chapter_card,
-            "counter": self._choreo_counter,
+            "counter_sync": self._choreo_counter,
+            "data_text": self._choreo_data_text,
+            "photo_organism": self._choreo_organism_reveal,
+            "bar_chart_build": self._choreo_bar_chart,
+            "before_after": self._choreo_before_after,
+            "dot_merge": self._choreo_dot_merge,
+            "remove_reveal": self._choreo_remove_reveal,
+            "svg_reveal": self._choreo_svg_reveal,
+            "ambient_field": self._choreo_ambient_field,
+            "title": self._choreo_title,
             "fingerprint_compare": self._choreo_fingerprint_compare,
             "sonar_ring": self._choreo_sonar_ring,
             "anchor_drop": self._choreo_anchor_drop,
             "dot_field": self._choreo_dot_field,
-            "remove_reveal": self._choreo_remove_reveal,
-            "dot_merge": self._choreo_dot_merge,
-            "bar_chart": self._choreo_bar_chart,
-            "before_after": self._choreo_before_after,
-            "organism_reveal": self._choreo_organism_reveal,
-            "data_text": self._choreo_data_text,
         }
 
-        method = method_map.get(choreo_type)
+        method = method_map.get(slide_type)
         if method:
-            return method(params, duration, images_dir)
+            return method(clip, duration, images_dir)
         return ""
 
     # ── Choreography Primitives (return indented code blocks) ──
 
-    def _choreo_chapter_card(self, params, duration, images_dir):
+    def _choreo_chapter_card(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         num = params.get("num", "00")
         title = params.get("title", "UNTITLED")
         return f'''        # Chapter card
@@ -618,24 +665,56 @@ def make_floating_bg(n=80, spread=7.0):
         throb_title(self, ch_title, cycles=2, scale_factor=1.03, cycle_time=1.0)
         alive_wait(self, {max(duration - 4.0, 0.5):.1f}, particles=bg)'''
 
-    def _choreo_counter(self, params, duration, images_dir):
-        to_val = params.get("to", 0)
-        color = str(params.get("color", "gold")).upper()
-        label = params.get("label", "")
-        label_line = ""
-        if label:
-            label_line = f'''
-        lbl = Text("{label}", font="Courier", color=TEXT_DIM).scale(0.4)
-        lbl.next_to(num, DOWN, buff=0.3)
-        self.play(FadeIn(lbl), run_time=0.5)'''
-        return f'''        # Counter -> {to_val}
-        num = Text("{to_val}", font="Courier", color={color}, weight=BOLD).scale(1.8)
-        num.set_opacity(0)
-        self.play(num.animate.set_opacity(1.0), run_time=1.0)
-        throb_title(self, num, cycles=2, scale_factor=1.06, cycle_time=1.0){label_line}
-        alive_wait(self, {max(duration - 4.0, 0.5):.1f}, particles=bg)'''
+    def _choreo_counter(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        word_times = clip.get("word_times", [])
+        count_time = 0.5
+        count_to = 0
+        count_color = palette["gold"]
+        count_label = ""
+        for cue in cue_words:
+            if cue.get("event") == "start_count":
+                idx = cue.get("at_index", 0)
+                if idx < len(word_times):
+                    count_time = word_times[idx]["start"]
+                params = cue.get("params", {})
+                count_to = params.get("to", 0)
+                color_name = params.get("color", "gold")
+                color_map = {"gold": palette["gold"], "cyan": palette["cyan"],
+                             "green": palette["glow"], "red": palette["sith_red"]}
+                count_color = color_map.get(color_name, palette["gold"])
+                count_label = params.get("label", "")
+                break
+        try:
+            count_val = int(str(count_to).replace(",", ""))
+        except (ValueError, TypeError):
+            count_val = 0
+        label_code = ""
+        if count_label:
+            label_code = f'\n        lbl = Text("{count_label}", color=TEXT_DIM, font_size=36)\n        lbl.next_to(counter, DOWN, buff=0.5)\n        self.play(FadeIn(lbl), run_time=0.5)'
+        return f'''        # Counter sync: wait for cue at {count_time:.2f}s, count to {count_val}
+        self.wait({count_time})
+        counter = Integer(0, color="{count_color}").scale(4.5)
+        self.add(counter)
+{label_code}
+        count_dur = min(2.5, {duration} - {count_time} - 1.5)
+        self.play(
+            counter.animate.set_value({count_val}),
+            run_time=max(count_dur, 0.5),
+            rate_func=rush_from,
+        )
+        self.play(counter.animate.scale(1.08), run_time=0.15)
+        self.play(counter.animate.scale(1/1.08), run_time=0.3)
+        hold = max({duration} - {count_time} - count_dur - 1.5, 0.3)
+        alive_wait(self, hold, particles=bg)'''
 
-    def _choreo_fingerprint_compare(self, params, duration, images_dir):
+    def _choreo_fingerprint_compare(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         mol1 = params.get("mol1", "A")
         mol2 = params.get("mol2", "B")
         score = float(params.get("score", 0))
@@ -661,7 +740,12 @@ def make_floating_bg(n=80, spread=7.0):
         self.play(FadeIn(score_text, scale=1.3), run_time=1.0)
         alive_wait(self, {max(duration - 6.0, 1.0):.1f}, particles=bg)'''
 
-    def _choreo_sonar_ring(self, params, duration, images_dir):
+    def _choreo_sonar_ring(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         center = params.get("center", "Anchor")
         high = int(params.get("high", 0))
         med = int(params.get("med", 0))
@@ -687,7 +771,12 @@ def make_floating_bg(n=80, spread=7.0):
         self.play(FadeIn(tiers, lag_ratio=0.3), run_time=1.5)
         alive_wait(self, {max(duration - 7.0, 1.0):.1f}, particles=bg)'''
 
-    def _choreo_anchor_drop(self, params, duration, images_dir):
+    def _choreo_anchor_drop(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         name = params.get("name", "Compound")
         count = int(params.get("count", 0))
         color = str(params.get("color", "gold")).upper()
@@ -710,7 +799,12 @@ def make_floating_bg(n=80, spread=7.0):
         throb_title(self, counter, cycles=2, scale_factor=1.05, cycle_time=0.8)
         alive_wait(self, {max(duration - 6.0, 1.0):.1f}, particles=bg)'''
 
-    def _choreo_dot_field(self, params, duration, images_dir):
+    def _choreo_dot_field(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         total = int(params.get("total", 64659))
         lit_pct = int(params.get("lit_pct", 31))
         label = params.get("label", "")
@@ -737,7 +831,12 @@ def make_floating_bg(n=80, spread=7.0):
         self.play(FadeIn(field, lag_ratio=0.003), run_time=2.0){label_code}
         alive_wait(self, {max(duration - 4.0, 1.0):.1f}, particles=bg)'''
 
-    def _choreo_remove_reveal(self, params, duration, images_dir):
+    def _choreo_remove_reveal(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         removed = params.get("removed", "A")
         emerged = params.get("emerged", "B")
         via = params.get("via", "C")
@@ -772,7 +871,12 @@ def make_floating_bg(n=80, spread=7.0):
         self.play(FadeIn(via_text), run_time=0.5){effect_code}
         alive_wait(self, {max(duration - 9.0, 1.0):.1f}, particles=bg)'''
 
-    def _choreo_dot_merge(self, params, duration, images_dir):
+    def _choreo_dot_merge(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         d1 = params.get("dot1", "A")
         d2 = params.get("dot2", "B")
         pathways = params.get("pathways", [])
@@ -807,7 +911,12 @@ def make_floating_bg(n=80, spread=7.0):
         self.play(FadeIn(flash, scale=3.0), run_time=0.5){result_code}
         alive_wait(self, {max(duration - 7.0, 1.0):.1f}, particles=bg)'''
 
-    def _choreo_bar_chart(self, params, duration, images_dir):
+    def _choreo_bar_chart(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         items = params.get("items", [])
         if isinstance(items, str): items = [items]
         bar_time = max(duration - 2.0, 1.0) / max(len(items), 1)
@@ -830,7 +939,12 @@ def make_floating_bg(n=80, spread=7.0):
         code += f"        alive_wait(self, 1.0, particles=bg)"
         return code
 
-    def _choreo_before_after(self, params, duration, images_dir):
+    def _choreo_before_after(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         label = params.get("label", "Metric")
         before = params.get("before", "0")
         after = params.get("after", "0")
@@ -855,57 +969,120 @@ def make_floating_bg(n=80, spread=7.0):
         throb_title(self, after_val, cycles=1, scale_factor=1.05)
         alive_wait(self, {max(duration - 6.0, 1.0):.1f}, particles=bg)'''
 
-    def _choreo_organism_reveal(self, params, duration, images_dir):
-        image = params.get("image", "")
-        name = params.get("name", "Organism")
-        compound = params.get("compound", "Compound")
-        note = params.get("note", "")
-        img_path = f"{images_dir}/{image}" if image else ""
-        hold = max(duration - 5.0, 2.0)
-        return f'''        # Organism: {name}
-        try:
-            img = ImageMobject("{img_path}")
-            img.height = 4.5
-            img.width = min(img.width * (4.5 / img.height), 5.5)
-            img.move_to(LEFT * 2.5)
-            self.play(FadeIn(img), run_time=1.5)
-            self.play(img.animate.scale(1.04), run_time={hold:.1f}, rate_func=linear)
-        except Exception:
-            alive_wait(self, {hold:.1f}, particles=bg)
-        info = VGroup(
-            Text("{name}", font="Courier", color=CYAN, weight=BOLD).scale(0.4),
-            Text("{compound}", font="Courier", color=GOLD).scale(0.45),
-            Text("{note}", font="Courier", color=TEXT_DIM).scale(0.3),
-        ).arrange(DOWN, buff=0.15, aligned_edge=LEFT).move_to(RIGHT * 3)
-        self.play(FadeIn(info, lag_ratio=0.3), run_time=1.5)'''
+    def _choreo_organism_reveal(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        word_times = clip.get("word_times", [])
+        label_code_parts = []
+        label_count = 0
+        for cue in cue_words:
+            event = cue.get("event", "")
+            params = cue.get("params", {})
+            idx = cue.get("at_index", 0)
+            t = word_times[idx]["start"] if idx < len(word_times) else 0
+            if event in ("show_name", "show_note", "show_structure"):
+                text = params.get("name", params.get("note", params.get("structure", "")))
+                color = {"show_name": palette["gold"], "show_note": palette["cyan"],
+                         "show_structure": palette["purple"]}[event]
+                i = label_count
+                label_code_parts.append(f'''
+        # Cue: {event} at {t:.2f}s
+        current_time_{i} = self.renderer.time if hasattr(self.renderer, 'time') else 0
+        wait_{i} = max(0, {t:.2f} - current_time_{i})
+        if wait_{i} > 0:
+            self.wait(wait_{i})
+        lbl_{i} = Text("{text}", color="{color}", font_size=22)
+        lbl_box_{i} = SurroundingRectangle(lbl_{i}, color="{color}",
+                                            fill_color="{palette['bg']}", fill_opacity=0.85,
+                                            buff=0.15, corner_radius=0.05)
+        lbl_group_{i} = VGroup(lbl_box_{i}, lbl_{i})
+        frame = self.layers.get('content', {{}}).get('asset_0', None)
+        if frame:
+            lbl_group_{i}.next_to(frame, RIGHT, buff=0.8).shift(DOWN * {i * 0.9 - 0.5})
+            pointer_{i} = Line(
+                frame.get_right() + RIGHT * 0.1,
+                lbl_group_{i}.get_left() + LEFT * 0.1,
+                color="{color}", stroke_width=1.5,
+            )
+            self.play(Create(pointer_{i}), FadeIn(lbl_group_{i}, shift=RIGHT * 0.2), run_time=0.8)
+        else:
+            lbl_group_{i}.move_to(RIGHT * 2 + DOWN * {i * 0.9 - 0.5})
+            self.play(FadeIn(lbl_group_{i}, shift=RIGHT * 0.2), run_time=0.8)
+        self.wait(0.3)''')
+                label_count += 1
+        labels_block = "\n".join(label_code_parts)
+        hold = max(duration - 2.0 - label_count * 1.1, 0.5)
+        return f'''        # Organism reveal with cue-synced labels
+{labels_block}
+        alive_wait(self, {hold:.1f}, particles=bg)'''
 
-    def _choreo_data_text(self, params, duration, images_dir):
-        text = params.get("text", "")
-        return f'''        # Data text
-        txt = Text("{text}", font="Courier", color=GLOW).scale(0.5)
-        self.play(FadeIn(txt, shift=UP * 0.2), run_time=1.0)
-        alive_wait(self, {max(duration - 2.0, 0.5):.1f}, particles=bg)'''
+    def _choreo_data_text(self, clip, duration, images_dir):
+        visuals = clip.get("visuals", {})
+        cue_words = visuals.get("cue_words", [])
+        word_times = clip.get("word_times", [])
+        display_text = ""
+        show_time = 0.2
+        for cue in cue_words:
+            if cue.get("event") == "show_text":
+                display_text = cue.get("params", {}).get("text", "")
+                idx = cue.get("at_index", 0)
+                if idx < len(word_times):
+                    show_time = word_times[idx].get("start", 0.2)
+                break
+        if not display_text:
+            display_text = clip.get("text", "")
+        display_text = display_text.replace('"', '\\"')
+        has_bullets = "\u00b7" in display_text or "\\n" in display_text
+        if has_bullets:
+            items = [s.strip() for s in display_text.replace("\\n", "\u00b7").split("\u00b7") if s.strip()]
+            items_code = ""
+            for i, item in enumerate(items):
+                items_code += f'\n        item_{i} = Text("{item}", color=TEXT_COL, font_size=48)\n        if item_{i}.width > 10:\n            item_{i}.scale(9.5 / item_{i}.width)\n        items.add(item_{i})'
+            return f'''        # Data text (multi-line): show at {show_time:.2f}s
+        self.wait({show_time})
+        items = VGroup()
+{items_code}
+        items.arrange(DOWN, buff=0.5, aligned_edge=LEFT)
+        items.move_to(ORIGIN)
+        for i, item in enumerate(items):
+            self.play(FadeIn(item, shift=RIGHT * 0.3), run_time=0.3)
+            self.wait(0.15)
+        alive_wait(self, max({duration} - {show_time} - len(items) * 0.45 - 1.0, 0.3), particles=bg)'''
+        else:
+            return f'''        # Data text: show at {show_time:.2f}s
+        self.wait({show_time})
+        txt = Text("{display_text}", color=TEXT_COL, font_size=64, weight=BOLD)
+        if txt.width > 12:
+            txt.scale(11.5 / txt.width)
+        self.play(FadeIn(txt, shift=UP * 0.2), run_time=0.3)
+        alive_wait(self, max({duration} - {show_time} - 1.0, 0.3), particles=bg)'''
 
-    # Legacy idle_scene override removed — base class build_scene handles it
+    def _choreo_svg_reveal(self, clip, duration, images_dir):
+        return f'''        # SVG reveal — content layer handles asset, choreo holds
+        alive_wait(self, {max(duration - 2.0, 1.0):.1f}, particles=bg)'''
 
-    # ── Bespoke slide-type builders ──────────────────────────────
+    def _choreo_ambient_field(self, clip, duration, images_dir):
+        return f'''        # Ambient field — breathing pause
+        line = Line(LEFT * 2, RIGHT * 2, color=GOLD, stroke_width=1, stroke_opacity=0.3)
+        self.add(line)
+        alive_wait(self, {duration:.1f}, particles=bg)'''
 
-    def _build_title_scene(self, clip, duration, images_dir,
-                           chapter_num, chapter_title):
-        """Delegate to the title tool's script builder."""
+    def _choreo_title(self, clip, duration, images_dir):
         from docugen.tools.title import build_title_script
-        import json
-        from pathlib import Path
+        import json as _json
+        from pathlib import Path as _Path
 
         visuals = clip.get("visuals", {})
-        params = visuals.get("params", {})
+        cue_words = visuals.get("cue_words", [])
+        params = {}
+        for cue in cue_words:
+            params.update(cue.get("params", {}))
         reveal_style = params.get("reveal_style", "particle")
 
-        # Read title/subtitle from production plan
-        build_dir = Path(images_dir).parent / "build"
+        build_dir = _Path(images_dir).parent / "build"
         plan_path = build_dir / "plan.json"
         if plan_path.exists():
-            plan = json.loads(plan_path.read_text())
+            plan = _json.loads(plan_path.read_text())
             meta = plan.get("meta", plan)
             title_text = meta.get("title", "Untitled")
             subtitle_text = meta.get("subtitle", "")
@@ -924,290 +1101,19 @@ def make_floating_bg(n=80, spread=7.0):
             "text": plan_palette.get("text", palette["text"]),
         }
 
-        font_dir = str(Path(__file__).resolve().parent.parent.parent.parent / "assets" / "fonts")
-        script = build_title_script(title_text, subtitle_text, reveal_style,
-                                    duration, colors, font_dir)
-        # Replace hardcoded Scene_title with the clip's actual class name
-        clip_id = clip["clip_id"]
-        return script.replace("Scene_title", f"Scene_{clip_id}")
-
-    def _build_chapter_card_scene(self, clip, duration, images_dir,
-                                  chapter_num, chapter_title):
-        """Bold chapter card — big title, thin separator line."""
-        clip_id = clip["clip_id"]
-        title_esc = chapter_title.replace('"', '\\\\"')
-
-        return self.manim_header() + f'''
-
-class Scene_{clip_id}(Scene):
-    def construct(self):
-        # Thin gold separator line
-        line = Line(LEFT * 4, RIGHT * 4, color=GOLD, stroke_width=2)
-
-        # Chapter title — LARGE, dominant
-        title = Text("{title_esc}", color=GOLD, font_size=72, weight=BOLD)
-        if title.width > 12:
-            title.scale(11.5 / title.width)
-        title.shift(DOWN * 0.3)
-
-        # Chapter number label
-        label = Text("CHAPTER {chapter_num}", color=TEXT_DIM, font_size=24)
-        label.next_to(title, UP, buff=0.5)
-        line.next_to(label, UP, buff=0.3)
-
-        self.play(GrowFromCenter(line), run_time=0.6)
-        self.play(FadeIn(label), run_time=0.4)
-        self.play(FadeIn(title, shift=UP * 0.3), run_time=0.8)
-
-        # Hold — title stays on screen
-        self.wait(max({duration} - 2.5, 0.5))
-
-        self.play(FadeOut(title), FadeOut(label), FadeOut(line), run_time=0.5)
-'''
-
-    def _build_data_text_scene(self, clip, duration, images_dir,
-                               chapter_num, chapter_title):
-        """Big bold text dominating the frame. Text IS the visual."""
-        clip_id = clip["clip_id"]
-        visuals = clip.get("visuals", {})
-        cue_words = visuals.get("cue_words", [])
-        word_times = clip.get("word_times", [])
-
-        # Get display text from cue_word params or clip text
-        display_text = ""
-        show_time = 0.2
-        for cue in cue_words:
-            if cue.get("event") == "show_text":
-                display_text = cue.get("params", {}).get("text", "")
-                idx = cue.get("at_index", 0)
-                if idx < len(word_times):
-                    show_time = word_times[idx].get("start", 0.2)
-                break
-
-        if not display_text:
-            display_text = clip.get("text", "")
-
-        display_text = display_text.replace('"', '\\\\"')
-
-        # Split on · or \n for multi-line bullet treatment
-        has_bullets = "·" in display_text or "\\n" in display_text
-
-        if has_bullets:
-            # Multi-line: split and show as stacked items
-            items = [s.strip() for s in display_text.replace("\\n", "·").split("·") if s.strip()]
-            items_code = ""
-            for i, item in enumerate(items):
-                items_code += f'''
-        item_{i} = Text("{item}", color=TEXT_COL, font_size=48)
-        if item_{i}.width > 10:
-            item_{i}.scale(9.5 / item_{i}.width)
-        items.add(item_{i})'''
-
-            return self.manim_header() + f'''
-
-class Scene_{clip_id}(Scene):
-    def construct(self):
-        self.wait({show_time})
-
-        items = VGroup()
-{items_code}
-        items.arrange(DOWN, buff=0.5, aligned_edge=LEFT)
-        items.move_to(ORIGIN)
-
-        for i, item in enumerate(items):
-            self.play(FadeIn(item, shift=RIGHT * 0.3), run_time=0.3)
-            self.wait(0.15)
-
-        self.wait(max({duration} - {show_time} - len(items) * 0.45 - 1.0, 0.3))
-        self.play(FadeOut(items), run_time=0.5)
-'''
-        else:
-            # Single line: big and centered
-            return self.manim_header() + f'''
-
-class Scene_{clip_id}(Scene):
-    def construct(self):
-        self.wait({show_time})
-
-        text = Text("{display_text}", color=TEXT_COL, font_size=64, weight=BOLD)
-        if text.width > 12:
-            text.scale(11.5 / text.width)
-
-        self.play(FadeIn(text, shift=UP * 0.2), run_time=0.3)
-
-        # Hold for full clip duration
-        self.wait(max({duration} - {show_time} - 1.0, 0.3))
-
-        self.play(FadeOut(text), run_time=0.4)
-'''
-
-    def _build_ambient_field_scene(self, clip, duration, images_dir,
-                                   chapter_num, chapter_title):
-        """Minimal dark hold — just a brief breathing pause."""
-        clip_id = clip["clip_id"]
-
-        return self.manim_header() + f'''
-
-class Scene_{clip_id}(Scene):
-    def construct(self):
-        # Thin gold line as visual anchor
-        line = Line(LEFT * 2, RIGHT * 2, color=GOLD, stroke_width=1, stroke_opacity=0.3)
-        self.add(line)
-        self.wait({duration:.1f})
-'''
-
-    def _build_photo_organism_scene(self, clip, duration, images_dir,
-                                    chapter_num, chapter_title):
-        """Photo inset with imperial border frame and animated pointer labels."""
-        clip_id = clip["clip_id"]
-        visuals = clip.get("visuals", {})
-        assets = visuals.get("assets", [])
-        cue_words = visuals.get("cue_words", [])
-        word_times = clip.get("word_times", [])
-        photo = assets[0] if assets else ""
-        images_dir_esc = images_dir.replace("\\", "\\\\")
-
-        # Build label animations keyed to cue_words
-        label_code_parts = []
-        label_count = 0
-        for cue in cue_words:
-            event = cue.get("event", "")
-            params = cue.get("params", {})
-            idx = cue.get("at_index", 0)
-            t = word_times[idx]["start"] if idx < len(word_times) else 0
-
-            if event in ("show_name", "show_note", "show_structure"):
-                text = params.get("name", params.get("note", params.get("structure", "")))
-                color = {"show_name": palette["gold"], "show_note": palette["cyan"],
-                         "show_structure": palette["purple"]}[event]
-                i = label_count
-                label_code_parts.append(f'''
-        # Wait until cue word at {t:.2f}s
-        current_time_{i} = self.renderer.time if hasattr(self.renderer, 'time') else 0
-        wait_{i} = max(0, {t:.2f} - current_time_{i})
-        if wait_{i} > 0:
-            self.wait(wait_{i})
-
-        lbl_{i} = Text("{text}", color="{color}", font_size=22)
-        lbl_box_{i} = SurroundingRectangle(lbl_{i}, color="{color}",
-                                            fill_color="{palette['bg']}", fill_opacity=0.85,
-                                            buff=0.15, corner_radius=0.05)
-        lbl_group_{i} = VGroup(lbl_box_{i}, lbl_{i})
-        lbl_group_{i}.next_to(photo_frame, RIGHT, buff=0.8).shift(DOWN * {i * 0.9 - 0.5})
-        pointer_{i} = Line(
-            photo_frame.get_right() + RIGHT * 0.1,
-            lbl_group_{i}.get_left() + LEFT * 0.1,
-            color="{color}", stroke_width=1.5,
-        )
-        self.play(Create(pointer_{i}), FadeIn(lbl_group_{i}, shift=RIGHT * 0.2), run_time=0.8)
-        self.wait(0.3)''')
-                label_count += 1
-
-        labels_block = "\n".join(label_code_parts)
-
-        return self.manim_header() + f'''
-from pathlib import Path
-
-class Scene_{clip_id}(Scene):
-    def construct(self):
-        # Imperial border — corner brackets
-        corners = VGroup()
-        for x_sign, y_sign in [(-1,1), (1,1), (1,-1), (-1,-1)]:
-            cx, cy = x_sign * 6.5, y_sign * 3.5
-            h_line = Line([cx, cy, 0], [cx - x_sign * 0.8, cy, 0],
-                         color="{palette['gold']}", stroke_width=1.5)
-            v_line = Line([cx, cy, 0], [cx, cy - y_sign * 0.8, 0],
-                         color="{palette['gold']}", stroke_width=1.5)
-            corners.add(h_line, v_line)
-        self.play(Create(corners, lag_ratio=0.1), run_time=1.0)
-
-        # Photo inset with frame
-        photo_path = Path("{images_dir_esc}") / "{photo}"
-        if photo_path.exists():
-            photo_img = ImageMobject(str(photo_path))
-            photo_img.height = 4.0
-            photo_img.width = min(photo_img.width, 5.0)
-        else:
-            photo_img = Rectangle(width=4, height=3, color="{palette['grid']}",
-                                 fill_opacity=0.3)
-        photo_img.move_to(LEFT * 2.5)
-        photo_frame = SurroundingRectangle(photo_img, color="{palette['gold']}",
-                                           buff=0.08, corner_radius=0.05,
-                                           stroke_width=1.5)
-        self.play(FadeIn(photo_img), Create(photo_frame), run_time=1.2)
-
-        # Animated pointer labels (cue-word synced)
-{labels_block}
-
-        # Hold remaining time
-        hold = max({duration} - 2.2 - {label_count} * 1.1, 0.5)
-        self.wait(hold)
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.0)
-'''
-
-    def _build_counter_sync_scene(self, clip, duration, images_dir,
-                                  chapter_num, chapter_title):
-        """Number counter that starts at the cue word timestamp."""
-        clip_id = clip["clip_id"]
-        visuals = clip.get("visuals", {})
-        cue_words = visuals.get("cue_words", [])
-        word_times = clip.get("word_times", [])
-
-        # Find start_count cue
-        count_time = 0.5
-        count_to = 0
-        count_color = palette["gold"]
-        count_label = ""
-        for cue in cue_words:
-            if cue.get("event") == "start_count":
-                idx = cue.get("at_index", 0)
-                if idx < len(word_times):
-                    count_time = word_times[idx]["start"]
-                params = cue.get("params", {})
-                count_to = params.get("to", 0)
-                color_name = params.get("color", "gold")
-                color_map = {"gold": palette["gold"], "cyan": palette["cyan"],
-                            "green": palette["glow"], "red": palette["sith_red"]}
-                count_color = color_map.get(color_name, palette["gold"])
-                count_label = params.get("label", "")
-                break
-
-        # Try to parse count_to as a number
-        try:
-            count_val = int(str(count_to).replace(",", ""))
-        except (ValueError, TypeError):
-            count_val = 0
-
-        return self.manim_header() + f'''
-
-class Scene_{clip_id}(Scene):
-    def construct(self):
-        # Wait for cue word
-        self.wait({count_time})
-
-        # BIG counter — dominates the frame
-        counter = Integer(0, color="{count_color}").scale(4.5)
-        label = Text("{count_label}", color=TEXT_DIM, font_size=36)
-        label.next_to(counter, DOWN, buff=0.5)
-        self.add(counter, label)
-
-        # Animate count
-        count_dur = min(2.5, {duration} - {count_time} - 1.5)
-        self.play(
-            counter.animate.set_value({count_val}),
-            run_time=max(count_dur, 0.5),
-            rate_func=rush_from,
-        )
-
-        # Brief flash on completion
-        self.play(counter.animate.scale(1.08), run_time=0.15)
-        self.play(counter.animate.scale(1/1.08), run_time=0.3)
-
-        # Hold — number stays on screen
-        hold = max({duration} - {count_time} - count_dur - 1.5, 0.3)
-        self.wait(hold)
-        self.play(FadeOut(counter), FadeOut(label), run_time=0.5)
-'''
+        font_dir = str(_Path(__file__).resolve().parent.parent.parent.parent / "assets" / "fonts")
+        full_script = build_title_script(title_text, subtitle_text, reveal_style,
+                                         duration, colors, font_dir)
+        lines = full_script.split("\n")
+        body_lines = []
+        in_body = False
+        for line in lines:
+            if "def construct(self):" in line:
+                in_body = True
+                continue
+            if in_body:
+                body_lines.append(line)
+        return "\n".join(body_lines) if body_lines else "        pass"
 
     def transition_sounds(self) -> dict[str, callable]:
         return {
