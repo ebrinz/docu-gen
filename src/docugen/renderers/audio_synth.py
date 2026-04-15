@@ -49,7 +49,7 @@ def _gen_blip(duration, curve):
     dur = min(duration, 0.15)
     sig = _sine(880, dur) * 0.6 + _sine(1320, dur) * 0.3
     sig = _envelope(sig, attack=0.005, decay=0.08)
-    return sig * 0.4
+    return sig * 0.7
 
 
 def _gen_tick(duration, curve):
@@ -57,7 +57,7 @@ def _gen_tick(duration, curve):
     dur = min(duration, 0.05)
     sig = _sine(2000, dur)
     sig = _envelope(sig, attack=0.002, decay=0.03)
-    return sig * 0.3
+    return sig * 0.5
 
 
 def _gen_tick_accelerate(duration, curve):
@@ -75,7 +75,7 @@ def _gen_tick_accelerate(duration, curve):
         seg = end - idx
         if seg > 0:
             out[idx:end] += tick[:seg] * (0.3 + 0.7 * i / n_ticks)
-    return out * 0.5
+    return out * 0.7
 
 
 def _gen_sting(duration, curve):
@@ -83,7 +83,7 @@ def _gen_sting(duration, curve):
     dur = min(duration, 0.4)
     sig = _sine(440, dur) * 0.5 + _sine(660, dur) * 0.3 + _sine(880, dur) * 0.2
     sig = _envelope(sig, attack=0.005, decay=0.25)
-    return sig * 0.5
+    return sig * 0.7
 
 
 def _gen_swoosh(duration, curve):
@@ -101,7 +101,7 @@ def _gen_swoosh(duration, curve):
         seg = noise[i:end]
         out[i:end] = _lowpass(np.pad(seg, (100, 100)), cutoff)[100:100 + end - i]
     out = _envelope(out, attack=0.02, decay=0.15)
-    return out * 0.3
+    return out * 0.5
 
 
 def _gen_fade_down(duration, curve):
@@ -111,7 +111,7 @@ def _gen_fade_down(duration, curve):
     freq = 440 * np.exp(-2 * t / dur)
     sig = np.sin(2 * np.pi * np.cumsum(freq) / _SR)
     sig = _envelope(sig, attack=0.01, decay=0.2)
-    return sig.astype(np.float32) * 0.35
+    return sig.astype(np.float32) * 0.5
 
 
 def _gen_rise(duration, curve):
@@ -121,14 +121,14 @@ def _gen_rise(duration, curve):
     freq = 220 * np.exp(2 * t / dur)
     sig = np.sin(2 * np.pi * np.cumsum(freq) / _SR)
     sig = _envelope(sig, attack=0.02, decay=0.1)
-    return sig.astype(np.float32) * 0.35
+    return sig.astype(np.float32) * 0.5
 
 
 def _gen_trace_hum(duration, curve):
     """Sustained sine at theme frequency."""
     sig = _sine(220, duration) * 0.3 + _sine(330, duration) * 0.15
     sig = _envelope(sig, attack=0.1, decay=0.3)
-    return sig.astype(np.float32) * 0.25
+    return sig.astype(np.float32) * 0.4
 
 
 def _gen_tension_build(duration, curve):
@@ -149,7 +149,7 @@ def _gen_tension_build(duration, curve):
     # Ramp volume up
     out *= np.linspace(0, 1, n) ** 1.5
     out = _envelope(out, attack=0.05, decay=0.1)
-    return out * 0.4
+    return out * 0.6
 
 
 def _gen_swell_hit(duration, curve):
@@ -164,7 +164,7 @@ def _gen_swell_hit(duration, curve):
     hit = _sine(440, hit_n / _SR) * 0.8 + _sine(660, hit_n / _SR) * 0.4
     hit = _envelope(hit, attack=0.003, decay=0.15)
     out = np.concatenate([swell, hit])
-    return out.astype(np.float32) * 0.5
+    return out.astype(np.float32) * 0.7
 
 
 # ── Generator dispatch ────────────────────────────────────────────────
@@ -261,10 +261,10 @@ def render_node(node, inputs, clip, project_path):
         if seg_len > 0:
             audio[start_sample:end_sample] += sound[:seg_len]
 
-    # Normalize to prevent clipping
+    # Normalize — boost cue sounds to sit clearly in the mix
     peak = np.max(np.abs(audio))
     if peak > 0.01:
-        audio = audio / peak * 0.8
+        audio = audio / peak * 0.95
 
     wavfile.write(str(out_path), _SR, audio)
     return out_path
