@@ -534,165 +534,15 @@ def render_chapter(project_path: Path, chapter: dict, doc_title: str,
 PACING_BUFFER = {"tight": 0.5, "normal": 1.5, "breathe": 3.5}
 
 
-def _parse_direction(direction: str) -> tuple[str, dict]:
-    """Parse 'primitive_name(k=v, k=v)' into (name, params_dict).
-
-    Returns ("", {}) if direction doesn't match the pattern.
-    List values use bracket syntax: [a,b,c]
-    """
-    import re
-    match = re.match(r'(\w+)\((.+)\)$', direction.strip(), re.DOTALL)
-    if not match:
-        return ("", {})
-
-    name = match.group(1)
-    params_str = match.group(2)
-    params = {}
-
-    # Split on commas not inside brackets
-    parts = re.split(r',\s*(?![^\[]*\])', params_str)
-    for part in parts:
-        if '=' not in part:
-            continue
-        key, val = part.split('=', 1)
-        key = key.strip()
-        val = val.strip()
-        # Parse list values
-        if val.startswith('[') and val.endswith(']'):
-            val = [v.strip() for v in val[1:-1].split(',')]
-        # Parse numeric values
-        elif val.replace('.', '').replace('-', '').isdigit():
-            val = float(val) if '.' in val else int(val)
-        params[key] = val
-
-    return (name, params)
-
-
-# Animation primitive dispatch table
-ANIM_PRIMITIVES = {
-    "counter", "fingerprint_compare", "sonar_ring", "anchor_drop",
-    "dot_field", "remove_reveal", "dot_merge", "bar_chart",
-    "before_after", "organism_reveal",
-}
-
-
-def build_clip_script(clip: dict, theme_name: str, duration: float,
-                      images_dir: str, chapter_num: str = None,
-                      chapter_title: str = None) -> str:
-    """Generate a Manim script for a single clip using the theme's three-layer system."""
-    from docugen.themes import load_theme
-    theme = load_theme(theme_name)
-
-    # Handle legacy flat visuals format — convert to three-layer
-    visuals = clip.get("visuals", {})
-    if "choreography" not in visuals and "theme_elements" not in visuals:
-        # Legacy format: convert type + direction to choreography
-        vis_type = visuals.get("type", "blank")
-        direction = visuals.get("direction", "")
-        assets = visuals.get("assets", [])
-
-        clip = dict(clip)  # don't mutate original
-        clip["visuals"] = {
-            "theme_elements": ["hex_grid", "imperial_border", "floating_bg"],
-            "content": {"assets": assets, "placement": "center"},
-            "choreography": {},
-        }
-
-        if vis_type == "chapter_card":
-            clip["visuals"]["choreography"] = {
-                "type": "chapter_card",
-                "params": {"num": chapter_num or "00", "title": chapter_title or "UNTITLED"},
-            }
-            clip["visuals"]["content"]["assets"] = []
-        elif vis_type == "animation" and direction:
-            prim_name, params = _parse_direction(direction)
-            if prim_name and prim_name in ANIM_PRIMITIVES:
-                clip["visuals"]["choreography"] = {"type": prim_name, "params": params}
-            else:
-                clip["visuals"]["choreography"] = {}
-        elif vis_type == "image_reveal":
-            pass  # content layer handles assets
-        elif vis_type == "data_reveal" and direction:
-            clip["visuals"]["choreography"] = {
-                "type": "data_text", "params": {"text": direction},
-            }
-
-    return theme.build_scene(clip, duration, images_dir,
-                             chapter_num=chapter_num or "00",
-                             chapter_title=chapter_title or "")
-
-
-def render_clip(project_path: Path, clip: dict, theme_name: str,
-                chapter_num: str, chapter_title: str) -> str:
-    """Render a single clip to MP4."""
-    project_path = Path(project_path)
-    config = load_config(project_path)
-    clip_id = clip["clip_id"]
-    images_dir = project_path / "images"
-    clips_dir = project_path / "build" / "clips"
-    clips_dir.mkdir(parents=True, exist_ok=True)
-    media_dir = clips_dir / "media"
-
-    out_mp4 = clips_dir / f"{clip_id}.mp4"
-    if out_mp4.exists():
-        return str(out_mp4)
-
-    # Get duration from timing model (computed by direct_apply)
-    timing = clip.get("timing", {})
-    duration = timing.get("clip_duration", 0)
-
-    # Fallback: measure WAV if timing not yet computed
-    if duration <= 0:
-        wav_path = project_path / "build" / "narration" / f"{clip_id}.wav"
-        if wav_path.exists():
-            duration = _get_wav_duration(wav_path)
-        else:
-            duration = 3.0
-        pacing = clip.get("pacing", "normal")
-        duration += PACING_BUFFER.get(pacing, 1.5)
-
-    script = build_clip_script(
-        clip, theme_name, duration, str(images_dir),
-        chapter_num=chapter_num, chapter_title=chapter_title,
-    )
-    class_name = f"Scene_{clip_id}"
-    script_path = clips_dir / f"_scene_{clip_id}.py"
-    script_path.write_text(script)
-
-    fps = config["video"]["fps"]
-    quality = "-qh" if fps >= 60 else "-qm"
-
-    # Clean stale cached renders for this clip
-    for stale in media_dir.rglob(f"{class_name}.mp4"):
-        stale.unlink(missing_ok=True)
-
-    result = subprocess.run(
-        ["manim", quality, str(script_path.resolve()), class_name,
-         "--media_dir", str(media_dir.resolve()), "--format", "mp4",
-         "--disable_caching"],
-        capture_output=True, text=True,
-    )
-
-    if result.returncode != 0:
-        script_path.unlink(missing_ok=True)
-        raise RuntimeError(f"Manim render failed for {clip_id}:\n{result.stderr[-500:]}")
-
-    output_files = sorted(media_dir.rglob(f"{class_name}.mp4"),
-                          key=lambda p: p.stat().st_mtime, reverse=True)
-    if not output_files:
-        script_path.unlink(missing_ok=True)
-        raise FileNotFoundError(f"Manim output not found for {class_name}")
-
-    output_files[0].rename(out_mp4)
-    script_path.unlink(missing_ok=True)
-    return str(out_mp4)
-
-
 def _render_from_clips(project_path: Path) -> str:
-    """Render all clips from clips.json."""
+    """Render all clips from clips.json via compositing DAG."""
+    from docugen.compose import render_clip_dag
+    from docugen.themes import load_theme
+
     config = load_config(project_path)
     clips_data = json.loads((project_path / "build" / "clips.json").read_text())
     theme_name = clips_data.get("theme", config.get("theme", "biopunk"))
+    theme = load_theme(theme_name)
 
     results = []
     for i, chapter in enumerate(clips_data["chapters"]):
@@ -705,7 +555,8 @@ def _render_from_clips(project_path: Path) -> str:
                 results.append(f"{clip_id}.mp4 (exists)")
                 continue
             try:
-                render_clip(project_path, clip, theme_name, ch_num, ch_title)
+                dag = theme.default_dag(clip)
+                render_clip_dag(clip, dag, project_path, theme=theme)
                 results.append(f"{clip_id}.mp4 (rendered)")
             except Exception as e:
                 results.append(f"{clip_id}.mp4 (FAILED: {e})")

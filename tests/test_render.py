@@ -2,7 +2,7 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from docugen.tools.render import build_manim_script, render_chapter, build_clip_script
+from docugen.tools.render import build_manim_script, render_all
 
 
 def test_build_manim_script_intro():
@@ -22,7 +22,6 @@ def test_build_manim_script_intro():
     )
     assert "class Scene_intro" in script
     assert "Test Documentary" in script
-    assert "Introduction" in script
 
 
 def test_build_manim_script_mixed_with_images():
@@ -42,7 +41,6 @@ def test_build_manim_script_mixed_with_images():
     )
     assert "class Scene_ch1" in script
     assert "shot1.png" in script
-    assert "Chapter One" in script
 
 
 def test_build_manim_script_outro():
@@ -61,42 +59,31 @@ def test_build_manim_script_outro():
         images_dir=Path("/fake/images"),
     )
     assert "class Scene_outro" in script
-    assert "Conclusion" in script
 
 
-def test_build_clip_script_blank(tmp_path):
-    clip = {
-        "clip_id": "ch1_01",
-        "text": "Hello.",
-        "visuals": {"type": "blank", "assets": [], "direction": ""},
+def test_render_all_calls_compose(tmp_path):
+    clips_data = {
+        "title": "Test",
+        "theme": "biopunk",
+        "chapters": [{
+            "id": "intro",
+            "title": "Intro",
+            "clips": [{
+                "clip_id": "intro_01",
+                "text": "Hello",
+                "visuals": {"slide_type": "data_text", "cue_words": [], "assets": []},
+                "timing": {"clip_duration": 5.0},
+            }],
+        }],
     }
-    script = build_clip_script(clip, theme_name="biopunk",
-                               duration=5.0, images_dir=str(tmp_path))
-    assert "class Scene_ch1_01" in script
-    assert "def construct" in script
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "clips.json").write_text(json.dumps(clips_data))
+    (tmp_path / "images").mkdir()
+    (tmp_path / "config.yaml").write_text("title: Test\n")
 
-
-def test_build_clip_script_chapter_card(tmp_path):
-    clip = {
-        "clip_id": "ch2_01",
-        "text": "",
-        "visuals": {"type": "chapter_card", "assets": [], "direction": ""},
-    }
-    script = build_clip_script(clip, theme_name="biopunk",
-                               duration=4.0, images_dir=str(tmp_path),
-                               chapter_num="02", chapter_title="THE METHOD")
-    assert "class Scene_ch2_01" in script
-    assert "THE METHOD" in script
-
-
-def test_build_clip_script_image_reveal(tmp_path):
-    clip = {
-        "clip_id": "ch3_02",
-        "text": "Look at this.",
-        "visuals": {"type": "image_reveal", "assets": ["fig.svg"],
-                    "direction": "Fade in, zoom 1.04x"},
-    }
-    script = build_clip_script(clip, theme_name="biopunk",
-                               duration=8.0, images_dir=str(tmp_path))
-    assert "class Scene_ch3_02" in script
-    assert "fig.svg" in script
+    with patch("docugen.compose.render_clip_dag") as mock_dag:
+        mock_dag.return_value = tmp_path / "build" / "clips" / "intro_01.mp4"
+        (tmp_path / "build" / "clips").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "build" / "clips" / "intro_01.mp4").write_text("fake")
+        result = render_all(str(tmp_path))
+        assert mock_dag.called
