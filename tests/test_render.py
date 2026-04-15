@@ -81,9 +81,11 @@ def test_render_all_calls_compose(tmp_path):
     (tmp_path / "images").mkdir()
     (tmp_path / "config.yaml").write_text("title: Test\n")
 
+    (tmp_path / "build" / "clips").mkdir(parents=True, exist_ok=True)
     with patch("docugen.compose.render_clip_dag") as mock_dag:
-        mock_dag.return_value = tmp_path / "build" / "clips" / "intro_01.mp4"
-        (tmp_path / "build" / "clips").mkdir(parents=True, exist_ok=True)
-        (tmp_path / "build" / "clips" / "intro_01.mp4").write_text("fake")
+        out_path = tmp_path / "build" / "clips" / "intro_01.mp4"
+        mock_dag.return_value = out_path
+        # Don't create the mp4 beforehand — let render_all call the DAG
         result = render_all(str(tmp_path))
         assert mock_dag.called
+        assert "intro_01" in result
