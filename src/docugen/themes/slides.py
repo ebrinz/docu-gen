@@ -60,6 +60,7 @@ SLIDE_REGISTRY = {
         "description": "SVG asset fades/draws in, Ken Burns drift, labels",
         "events": {"show_asset", "highlight_region", "show_label"},
         "params": {},
+        "needs_content": True,
         "spans": [
             {"trigger": "show_asset", "offset": 0.0, "duration": 1.0,
              "audio": "swoosh", "curve": "ease_in"},
@@ -71,6 +72,7 @@ SLIDE_REGISTRY = {
         "description": "Photo inset with HUD border, animated pointer labels",
         "events": {"show_photo", "show_structure", "show_name", "show_note"},
         "params": {},
+        "needs_content": True,
         "spans": [
             {"trigger": "show_photo", "offset": 0.0, "duration": 1.2,
              "audio": "swoosh", "curve": "ease_in"},

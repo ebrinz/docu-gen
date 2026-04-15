@@ -36,3 +36,12 @@ def test_validate_cue_event_invalid():
 
 def test_validate_cue_event_ambient_field_has_no_events():
     assert validate_cue_event("ambient_field", "anything") is False
+
+
+def test_slide_registry_has_dag_hints():
+    photo = SLIDE_REGISTRY["photo_organism"]
+    assert "needs_content" in photo
+    assert photo["needs_content"] is True
+
+    counter = SLIDE_REGISTRY["counter_sync"]
+    assert counter.get("needs_content", False) is False
