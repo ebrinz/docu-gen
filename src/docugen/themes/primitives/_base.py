@@ -19,7 +19,8 @@ class PrimitiveModule(Protocol):
 
 
 REQUIRED_ATTRS = ("NAME", "DESCRIPTION", "CUE_EVENTS", "AUDIO_SPANS",
-                  "DATA_SCHEMA", "render")
+                  "DATA_SCHEMA", "PARAMS", "NEEDS_CONTENT", "DEPRECATED",
+                  "render")
 
 
 def validate_schema(data: dict, schema: dict, path: str) -> list[str]:

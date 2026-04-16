@@ -38,6 +38,29 @@ def test_validate_required_attrs_passes_when_complete():
     mod.CUE_EVENTS = set()
     mod.AUDIO_SPANS = []
     mod.DATA_SCHEMA = {}
+    mod.PARAMS = {}
+    mod.NEEDS_CONTENT = False
+    mod.DEPRECATED = False
     mod.render = lambda clip, duration, images_dir, theme: ""
 
     _validate_required_attrs("ok_prim", mod)  # must not raise
+
+
+def test_validate_required_attrs_catches_missing_needs_content():
+    """NEEDS_CONTENT is required; a primitive missing it must fail."""
+    from types import ModuleType
+    from docugen.themes.primitives import _validate_required_attrs
+
+    mod = ModuleType("partial_prim")
+    mod.NAME = "partial_prim"
+    mod.DESCRIPTION = "missing NEEDS_CONTENT"
+    mod.CUE_EVENTS = set()
+    mod.AUDIO_SPANS = []
+    mod.DATA_SCHEMA = {}
+    mod.PARAMS = {}
+    mod.DEPRECATED = False
+    mod.render = lambda clip, duration, images_dir, theme: ""
+    # NEEDS_CONTENT deliberately missing
+
+    with pytest.raises(ImportError, match="NEEDS_CONTENT"):
+        _validate_required_attrs("partial_prim", mod)
