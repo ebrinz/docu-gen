@@ -11,5 +11,9 @@ DEPRECATED = False
 
 
 def render(clip: dict, duration: float, images_dir: str, theme) -> str:
-    hold = max(duration, 0.5)
-    return f"        alive_wait(self, {hold:.2f}, particles=bg)\n"
+    # Ambient field — breathing pause
+    return (
+        f"        line = Line(LEFT * 2, RIGHT * 2, color=GOLD, stroke_width=1, stroke_opacity=0.3)\n"
+        f"        self.add(line)\n"
+        f"        alive_wait(self, {duration:.1f}, particles=bg)\n"
+    )

@@ -20,3 +20,12 @@ def test_render_compiles_with_asset():
     }
     body = svg_reveal.render(clip, duration=5.0, images_dir="/tmp", theme=None)
     ast.parse("def construct(self):\n" + body)
+
+
+def test_render_hold_matches_biopunk():
+    clip = {"clip_id": "x", "text": "",
+            "word_times": [],
+            "visuals": {"slide_type": "svg_reveal", "assets": []}}
+    body = svg_reveal.render(clip, duration=5.0, images_dir="/tmp", theme=None)
+    # biopunk holds for max(duration - 2.0, 1.0) — 3.0s at duration=5.0
+    assert "3.0" in body

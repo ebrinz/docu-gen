@@ -16,5 +16,6 @@ DEPRECATED = False
 
 
 def render(clip: dict, duration: float, images_dir: str, theme) -> str:
-    hold = max(duration - 0.5, 0.5)
-    return f"        alive_wait(self, {hold:.2f}, particles=bg)\n"
+    # SVG reveal — content layer handles asset, choreo holds
+    hold = max(duration - 2.0, 1.0)
+    return f"        alive_wait(self, {hold:.1f}, particles=bg)\n"

@@ -14,3 +14,9 @@ def test_render_is_valid_wait():
     body = ambient_field.render(clip, duration=4.0, images_dir="/tmp", theme=None)
     ast.parse("def construct(self):\n" + body)
     assert "wait" in body.lower()
+
+
+def test_render_includes_line_decoration():
+    clip = {"clip_id": "x", "visuals": {}, "text": "", "word_times": []}
+    body = ambient_field.render(clip, duration=4.0, images_dir="/tmp", theme=None)
+    assert "Line(" in body
