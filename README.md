@@ -269,6 +269,53 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
+## Roadmap
+
+Data visualization is being rebuilt. The current slide-type grammar (~11 primitives) renders generic Manim templates with labels but no real axes, units, or source data — so every data-bearing clip tends to look the same regardless of what the narration is saying. The rebuild introduces a typed grammar of ~22 primitives that render real charts from real data, a new `viz_extract` tool that decodes the source PDF's charts/tables into structured JSON, and an `llm_custom` escape hatch for clips that don't fit the grammar.
+
+Full design: [`docs/superpowers/specs/2026-04-16-manim-data-viz-design.md`](docs/superpowers/specs/2026-04-16-manim-data-viz-design.md)
+
+### Phase 1 — MVP grammar (in progress)
+
+Ship the typed grammar end-to-end, validated against the parse-evols-yeast pitch.
+
+- [ ] `themes/primitives/` package — auto-discovered registry, one file per primitive
+- [ ] Upgrade existing primitives with real schemas: `bar_chart`, `counter`, `before_after`, `callout`
+- [ ] New data viz primitives: `line_chart`, `tree`, `timeline`
+- [ ] Escape hatch: `llm_custom` renderer with compile-retry (max 3) loop
+- [ ] Migrate content primitives into the new layout (no behavior change): `title`, `chapter_card`, `ambient_field`, `svg_reveal`, `photo_organism`
+- [ ] `viz_extract` MCP tool — PDF → `build/pdf_data.json` via Claude vision, sidecar-hashed for caching
+- [ ] Extended `direct_prepare` — attaches `pdf_data.json` + primitive schemas to the direction context
+- [ ] Extended `direct_apply` — schema validation per primitive, rejects malformed specs before render
+- [ ] `themes/biopunk.py` refactor — 500-line method-map replaced by a thin dispatcher to primitives
+- [ ] Deprecate `dot_merge` and `remove_reveal` (flagged in registry; still functional for back-compat)
+
+**Acceptance:** parse-evols-yeast renders end-to-end, ≥60% of data-bearing clips use a typed primitive (not `llm_custom`), output visibly grounded in real data.
+
+### Phase 2 — Expand grammar
+
+Add the 9 remaining data viz primitives once MVP proves the pipeline.
+
+- [ ] `stacked_area` — composition over time
+- [ ] `scatter` — 2D distribution with optional size/color encoding
+- [ ] `grouped_bar` — multi-series categorical comparison
+- [ ] `pie_donut` — share (summed to 100%)
+- [ ] `histogram` — distribution from raw or pre-binned values
+- [ ] `sankey` — flow between categorical stages
+- [ ] `funnel` — stepped conversion
+- [ ] `network` — nodes + edges with force layout
+- [ ] `quadrant` — 2×2 positioning matrix
+
+### Phase 3 — Future
+
+Unscoped, in rough priority order.
+
+- [ ] Second theme (validates theme-owned-emphasis design, establishes theme-swap pattern)
+- [ ] Matplotlib/Plotly fallback renderer — emit static frames for chart types Manim handles poorly (dense scatter, heatmaps)
+- [ ] `llm_custom` promotion telemetry — flag recurring custom_script patterns as candidates for new typed primitives
+- [ ] Perilux migration off the legacy `plan.json` pipeline onto `clips.json` + primitives
+- [ ] `pdf_data.json` editing UI (currently hand-edit JSON; a simple web viewer would speed review)
+
 ## License
 
 MIT
