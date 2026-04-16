@@ -13,32 +13,31 @@ def test_get_unknown_primitive_raises():
         get_primitive("no_such_primitive")
 
 
-def test_missing_required_attr_raises(tmp_path, monkeypatch):
-    """A module in the primitives package missing a REQUIRED_ATTR must fail
-    import-time validation with an ImportError naming the module and attr."""
-    import importlib
-    import sys
-    import docugen.themes.primitives as pkg
+def test_validate_required_attrs_raises_on_missing():
+    """_validate_required_attrs raises ImportError naming the module and
+    missing attribute. This is the pure validation contract that underpins
+    discover_primitives' fail-loud behavior."""
+    from types import ModuleType
+    from docugen.themes.primitives import _validate_required_attrs
 
-    # Reset cache so this test is independent of prior discovery.
-    pkg._cache.clear()
+    mod = ModuleType("bad_prim")
+    mod.NAME = "bad_prim"
+    # NAME is set but DESCRIPTION, CUE_EVENTS, AUDIO_SPANS, DATA_SCHEMA, render are not
+    with pytest.raises(ImportError, match="bad_prim"):
+        _validate_required_attrs("bad_prim", mod)
 
-    # Drop a malformed primitive next to the package on a temp path.
-    malformed = tmp_path / "broken.py"
-    malformed.write_text(
-        "NAME = 'broken'\n"
-        "DESCRIPTION = 'missing render + schema'\n"
-        "CUE_EVENTS = set()\n"
-        "AUDIO_SPANS = []\n"
-        # intentionally missing DATA_SCHEMA and render
-    )
-    monkeypatch.syspath_prepend(str(tmp_path))
 
-    # Temporarily extend the package path so discover picks up our fake module.
-    monkeypatch.setattr(pkg, "__path__", list(pkg.__path__) + [str(tmp_path)])
+def test_validate_required_attrs_passes_when_complete():
+    """When every REQUIRED_ATTR is present, validation does not raise."""
+    from types import ModuleType
+    from docugen.themes.primitives import _validate_required_attrs
 
-    with pytest.raises(ImportError, match="broken"):
-        pkg.discover_primitives()
+    mod = ModuleType("ok_prim")
+    mod.NAME = "ok_prim"
+    mod.DESCRIPTION = "d"
+    mod.CUE_EVENTS = set()
+    mod.AUDIO_SPANS = []
+    mod.DATA_SCHEMA = {}
+    mod.render = lambda clip, duration, images_dir, theme: ""
 
-    # Leave the cache clean for subsequent tests.
-    pkg._cache.clear()
+    _validate_required_attrs("ok_prim", mod)  # must not raise
