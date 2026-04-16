@@ -69,17 +69,22 @@ def narrate(project_path: str) -> str:
 
     Reads build/clips.json, creates build/narration/{clip_id}.wav
     with per-clip emotion. Converts numbers to words and consolidates
-    short clips before synthesis. Skips existing files.
+    short clips before synthesis. Regenerates any WAV whose sidecar
+    text-hash no longer matches the current clip text/params.
 
-    After narration, automatically runs Whisper alignment to update
-    word_times in clips.json — this keeps visual cues synced to speech.
+    After narration, automatically runs Whisper alignment and recomputes
+    timing.clip_duration from the fresh WAVs so visual cues and stitch
+    offsets stay synced to speech without requiring direct_apply to re-run.
 
     Args:
         project_path: Path to project directory.
     """
+    from docugen.direct import recompute_timing
+
     narr_result = generate_narration(project_path)
     align_result = align_plan(project_path)
-    return narr_result + "\n\n" + align_result
+    timing_result = recompute_timing(project_path)
+    return "\n\n".join([narr_result, align_result, timing_result])
 
 
 @mcp.tool()
@@ -89,11 +94,17 @@ def align(project_path: str) -> str:
     Runs Whisper on each clip WAV, cross-correlates with ground-truth
     narration text, and saves word-level timestamps to clips.json.
     Choreography primitives use these to sync visuals with speech.
+    Also recomputes timing.clip_duration so stitch offsets match the
+    aligned speech boundaries.
 
     Args:
         project_path: Path to project directory.
     """
-    return align_plan(project_path)
+    from docugen.direct import recompute_timing
+
+    align_result = align_plan(project_path)
+    timing_result = recompute_timing(project_path)
+    return align_result + "\n\n" + timing_result
 
 
 @mcp.tool()

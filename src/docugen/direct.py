@@ -148,6 +148,35 @@ def direct_prepare(project_path: str | Path) -> str:
     )
 
 
+def recompute_timing(project_path: str | Path) -> str:
+    """Recompute per-clip timing from WAV durations + word_times.
+
+    Reads build/clips.json and build/narration/*.wav, rewrites clips.json
+    with fresh timing fields. Safe to call whenever narration changes.
+    """
+    project_path = Path(project_path)
+    build_dir = project_path / "build"
+    narr_dir = build_dir / "narration"
+    clips_path = build_dir / "clips.json"
+
+    if not clips_path.exists():
+        raise FileNotFoundError("No clips.json found. Run 'split' first.")
+
+    clips_data = json.loads(clips_path.read_text())
+    updated = 0
+    for chapter in clips_data["chapters"]:
+        offset = 0.0
+        for clip in chapter["clips"]:
+            wav_path = narr_dir / f"{clip['clip_id']}.wav"
+            wav_dur = get_wav_duration(wav_path) if wav_path.exists() else 0.0
+            clip["timing"] = compute_clip_timing(clip, wav_dur, offset)
+            offset += clip["timing"]["clip_duration"]
+            updated += 1
+
+    clips_path.write_text(json.dumps(clips_data, indent=2) + "\n")
+    return f"Recomputed timing for {updated} clips."
+
+
 def direct_apply(project_path: str | Path, direction_json: str) -> str:
     """Apply creative direction JSON to clips.json. No API calls.
 
@@ -160,7 +189,6 @@ def direct_apply(project_path: str | Path, direction_json: str) -> str:
     project_path = Path(project_path)
     build_dir = project_path / "build"
     images_dir = project_path / "images"
-    narr_dir = build_dir / "narration"
 
     clips_data = json.loads((build_dir / "clips.json").read_text())
     available_assets = {f.name for f in images_dir.iterdir()} if images_dir.exists() else set()
@@ -185,14 +213,6 @@ def direct_apply(project_path: str | Path, direction_json: str) -> str:
             f"clips.json updated — fix errors and re-run, or proceed to render."
         )
 
-    # Compute timing from actual WAV files
-    for chapter in clips_data["chapters"]:
-        offset = 0.0
-        for clip in chapter["clips"]:
-            wav_path = narr_dir / f"{clip['clip_id']}.wav"
-            wav_dur = get_wav_duration(wav_path) if wav_path.exists() else 0.0
-            clip["timing"] = compute_clip_timing(clip, wav_dur, offset)
-            offset += clip["timing"]["clip_duration"]
-
     (build_dir / "clips.json").write_text(json.dumps(clips_data, indent=2) + "\n")
+    recompute_timing(project_path)
     return f"Directed {applied} clips. Timing computed. All validation passed. clips.json updated."

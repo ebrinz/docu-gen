@@ -1,5 +1,6 @@
 """Narrate tool: generate TTS audio per clip or per chapter."""
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -12,6 +13,15 @@ from docugen.config import load_config
 from docugen.numberwords import numbers_to_words
 
 TARGET_SR = 44100
+
+
+def _synth_hash(text: str, voice_config: dict, exaggeration: float | None) -> str:
+    """Hash of every input that affects TTS output — text + voice settings."""
+    h = hashlib.sha256()
+    h.update(text.encode("utf-8"))
+    h.update(json.dumps(voice_config, sort_keys=True, default=str).encode("utf-8"))
+    h.update(str(exaggeration).encode("utf-8"))
+    return h.hexdigest()[:16]
 
 
 def _read_wav_duration(path: Path) -> float:
@@ -29,9 +39,6 @@ def _read_wav_duration(path: Path) -> float:
 def _generate_openai(client, clip_id: str, text: str, model: str,
                      voice: str, output_path: Path, speed: float = 1.0) -> Path:
     """Call OpenAI TTS. Retries with exponential backoff."""
-    if output_path.exists():
-        return output_path
-
     for attempt in range(3):
         try:
             response = client.audio.speech.create(
@@ -97,9 +104,6 @@ def _generate_chatterbox(voice_config: dict, text: str,
                          exaggeration: float | None = None) -> Path:
     """Generate a single WAV using Chatterbox MLX with voice cloning."""
     import torchaudio as ta
-
-    if output_path.exists():
-        return output_path
 
     model = _get_chatterbox_model()
 
@@ -193,23 +197,38 @@ def _generate_from_clips(project_path: Path, config: dict) -> str:
 
             # Convert numeric symbols to natural English for cleaner TTS
             text = numbers_to_words(text)
+            exagg = clip.get("exaggeration")
 
             out_path = narration_dir / f"{clip_id}.wav"
+            hash_path = out_path.with_suffix(".wav.txthash")
+            want_hash = _synth_hash(text, voice_config, exagg)
 
-            if engine == "chatterbox":
-                _generate_chatterbox(voice_config, text, out_path,
-                                     exaggeration=clip.get("exaggeration"))
+            cached = (
+                out_path.exists()
+                and hash_path.exists()
+                and hash_path.read_text().strip() == want_hash
+            )
+
+            if cached:
+                status = "cached"
             else:
-                _generate_openai(
-                    client, clip_id, text,
-                    model=voice_config["model"],
-                    voice=voice_config["voice"],
-                    output_path=out_path,
-                )
+                out_path.unlink(missing_ok=True)
+                if engine == "chatterbox":
+                    _generate_chatterbox(voice_config, text, out_path,
+                                         exaggeration=exagg)
+                else:
+                    _generate_openai(
+                        client, clip_id, text,
+                        model=voice_config["model"],
+                        voice=voice_config["voice"],
+                        output_path=out_path,
+                    )
+                hash_path.write_text(want_hash)
+                status = "synth"
 
             if out_path.exists():
                 duration = _read_wav_duration(out_path)
-                results.append(f"{clip_id}.wav ({duration:.1f}s)")
+                results.append(f"{clip_id}.wav ({duration:.1f}s, {status})")
 
     return "Generated narration:\n" + "\n".join(results)
 

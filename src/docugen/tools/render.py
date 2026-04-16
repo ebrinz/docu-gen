@@ -550,10 +550,6 @@ def _render_from_clips(project_path: Path) -> str:
         ch_title = chapter.get("title", "").upper()
         for clip in chapter["clips"]:
             clip_id = clip["clip_id"]
-            out_mp4 = project_path / "build" / "clips" / f"{clip_id}.mp4"
-            if out_mp4.exists():
-                results.append(f"{clip_id}.mp4 (exists)")
-                continue
             try:
                 dag = theme.default_dag(clip)
                 render_clip_dag(clip, dag, project_path, theme=theme)
