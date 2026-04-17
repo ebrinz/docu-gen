@@ -591,6 +591,18 @@ def make_floating_bg(n=80, spread=7.0):
         assets = visuals.get("assets", [])
         cue_words = visuals.get("cue_words", [])
 
+        # llm_custom bypasses the fused-scene path — the MCP-authored script
+        # owns its own Manim scene construction. We still compose + post-process
+        # to get audio cues and filter passes applied uniformly.
+        if slide_type == "llm_custom":
+            return [
+                {"name": "llm_custom", "renderer": "manim_llm_custom"},
+                {"name": "composite", "renderer": "ffmpeg_composite",
+                 "inputs": ["llm_custom"]},
+                {"name": "post", "renderer": "ffmpeg_post",
+                 "inputs": ["composite"], "filters": [], "audio": []},
+            ]
+
         nodes = [
             {"name": "bg", "renderer": "manim_theme",
              "elements": ["hex_grid", "imperial_border", "floating_bg"]},
