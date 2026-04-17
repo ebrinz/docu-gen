@@ -10,7 +10,7 @@ Give it a PDF spec, some images, and creative direction. It gives you back a pol
 
 ## How It Works
 
-docu-gen exposes nine tools through the Model Context Protocol, designed to run in sequence:
+docu-gen exposes a set of MCP tools designed to run in sequence:
 
 | Step | Tool | What it does |
 |------|------|-------------|
@@ -19,12 +19,14 @@ docu-gen exposes nine tools through the Model Context Protocol, designed to run 
 | 3 | **`split`** | Breaks chapters into individual clips with emotion tagging, exaggeration levels, and pacing |
 | 4 | **`narrate`** | Generates text-to-speech audio for each clip (OpenAI TTS or Chatterbox — see below) |
 | 5 | **`align`** | Runs Whisper on each clip's audio to produce word-level timestamps for visual sync |
-| 6a | **`direct_prepare`** | Gathers production plan visuals, clips, assets, and slide type registry; returns context for creative direction |
-| 6b | **`direct_apply`** | Validates creative direction JSON, computes WAV-derived timing, writes back to clips.json |
+| 6 | **`viz_extract`** | Reads the source PDF via vision, writes structured chart/table data to `build/pdf_data.json` for the direction step to draw on |
+| 7a | **`direct_prepare`** | Gathers production plan visuals, clips, assets, primitive schemas, and extracted PDF data; returns context for creative direction |
+| 7b | **`direct_apply`** | Validates creative direction JSON (including per-primitive schema validation), computes WAV-derived timing, writes back to clips.json |
 | — | **`title`** | Optional standalone tool: generate a title card (particle, glitch, trace, or typewriter style) |
-| 7 | **`render`** | Creates animated video scenes per clip using [Manim](https://www.manim.community/) and the project's theme |
-| 8 | **`score`** | Generates a synthesized ambient drone score with per-chapter layers and transition sounds |
-| 9 | **`stitch`** | Assembles clips, mixes narration with score (voice-activated ducking), outputs final MP4 |
+| 8 | **`spot`** | Builds `build/cue_sheet.json` — per-cue audio spans (tension builds, stings, sweeps, ticks) timed to clip narration |
+| 9 | **`render`** | Creates animated video scenes per clip using [Manim](https://www.manim.community/) and the project's theme |
+| 10 | **`score`** | Generates a synthesized ambient drone score with per-chapter layers and transition sounds |
+| 11 | **`stitch`** | Assembles clips, mixes narration with score (voice-activated ducking), outputs final MP4 |
 
 Between each step you can review and edit the intermediate artifacts — especially `build/clips.json` after split, where you can tune emotion, pacing, and visual direction per clip before proceeding.
 
@@ -115,7 +117,7 @@ pip install openai-whisper
 cp example.mcp.json .mcp.json
 ```
 
-Then open a Claude Code session in the `docu-gen` directory and start prompting. The nine `docugen` tools will be available automatically.
+Then open a Claude Code session in the `docu-gen` directory and start prompting. The `docugen` tools will be available automatically.
 
 ## Connecting to Claude Code
 
@@ -184,14 +186,23 @@ Once connected to your MCP client, use the tools in order. Each tool takes the p
 → align("/path/to/my-project")
   Adds word_times to clips.json — word-level timestamps via Whisper
 
+→ viz_extract("/path/to/my-project")
+  Decodes charts/tables from spec.pdf into build/pdf_data.json — review and fix
+  any misread numbers before direct_prepare consumes it
+
 → direct_prepare("/path/to/my-project")
-  Returns context summary — review and decide creative direction per clip
+  Returns context summary (+ primitive schemas + pdf_data.json) — decide
+  creative direction per clip
 
 → direct_apply("/path/to/my-project", direction_json)
-  Validates direction, computes timing — review clips.json before render
+  Validates direction (including per-primitive DATA_SCHEMA), computes timing —
+  review clips.json before render
 
 → title("/path/to/my-project")
   Optional: generate standalone title card (particle, glitch, trace, typewriter)
+
+→ spot("/path/to/my-project")
+  Build audio cue sheet from cue_words + slide_type spans
 
 → render("/path/to/my-project")
   Preview build/clips/*.mp4 — Manim scenes per clip
@@ -275,22 +286,26 @@ Data visualization is being rebuilt. The current slide-type grammar (~11 primiti
 
 Full design: [`docs/superpowers/specs/2026-04-16-manim-data-viz-design.md`](docs/superpowers/specs/2026-04-16-manim-data-viz-design.md)
 
-### Phase 1 — MVP grammar (in progress)
+### Phase 1 — MVP grammar (code complete; pending end-to-end validation)
 
 Ship the typed grammar end-to-end, validated against the parse-evols-yeast pitch.
 
-- [ ] `themes/primitives/` package — auto-discovered registry, one file per primitive
-- [ ] Upgrade existing primitives with real schemas: `bar_chart`, `counter`, `before_after`, `callout`
-- [ ] New data viz primitives: `line_chart`, `tree`, `timeline`
-- [ ] Escape hatch: `llm_custom` renderer with compile-retry (max 3) loop
-- [ ] Migrate content primitives into the new layout (no behavior change): `title`, `chapter_card`, `ambient_field`, `svg_reveal`, `photo_organism`
-- [ ] `viz_extract` MCP tool — PDF → `build/pdf_data.json` via Claude vision, sidecar-hashed for caching
-- [ ] Extended `direct_prepare` — attaches `pdf_data.json` + primitive schemas to the direction context
-- [ ] Extended `direct_apply` — schema validation per primitive, rejects malformed specs before render
-- [ ] `themes/biopunk.py` refactor — 500-line method-map replaced by a thin dispatcher to primitives
-- [ ] Deprecate `dot_merge` and `remove_reveal` (flagged in registry; still functional for back-compat)
+- [x] `themes/primitives/` package — auto-discovered registry, one file per primitive
+- [x] Upgrade existing primitives with real schemas: `bar_chart`, `counter`, `before_after`, `callout`
+- [x] New data viz primitives: `line_chart`, `tree`, `timeline`
+- [x] Escape hatch: `llm_custom` primitive + renderer with AST pre-check
+- [x] Migrate content primitives into the new layout: `title`, `chapter_card`, `ambient_field`, `svg_reveal`, `photo_organism`
+- [x] `viz_extract` MCP tool — hash-cached PDF-to-JSON scaffold; vision round-trip ships as v1 stub
+- [x] Extended `direct_prepare` — attaches `pdf_data.json` + primitive schemas to the direction context
+- [x] Extended `direct_apply` — schema validation per primitive, rejects malformed specs before render
+- [x] `themes/biopunk.py` refactor — 500-line method-map replaced by a thin dispatcher to primitives
+- [x] Deprecate `dot_merge` and `remove_reveal` (flagged `[DEPRECATED]` in registry; still functional for back-compat)
+- [x] Back-compat aliases: `data_text` → `callout`, `counter_sync` → `counter`, `bar_chart_build` → `bar_chart`
+- [ ] End-to-end validation on parse-evols-yeast
 
 **Acceptance:** parse-evols-yeast renders end-to-end, ≥60% of data-bearing clips use a typed primitive (not `llm_custom`), output visibly grounded in real data.
+
+**v1 caveat:** `viz_extract._extract_via_vision` is a stub. `pdf_data.json` is populated by hand (or patched in tests) until the MCP-client vision round-trip lands.
 
 ### Phase 2 — Expand grammar
 
