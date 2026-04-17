@@ -11,14 +11,17 @@ from docugen.tools.render import render_all
 from docugen.tools.score import generate_score
 from docugen.tools.stitch import stitch_all
 from docugen.tools.title import generate_title
+from docugen.tools.viz_extract import viz_extract as _viz_extract
 from docugen.spot import spot_project
 
 mcp = FastMCP("docugen", instructions=(
     "Documentary generation pipeline. Use tools in order: "
-    "init -> plan -> split -> narrate -> align -> direct_prepare -> direct_apply -> spot -> render -> score -> stitch. "
+    "init -> plan -> split -> narrate -> viz_extract -> direct_prepare -> direct_apply -> spot -> render -> score -> stitch. "
     "Use title to generate a standalone title card. "
     "Review and edit clips.json between steps to adjust "
-    "emotion, pacing, visual direction, and cue words per clip."
+    "emotion, pacing, visual direction, and cue words per clip. "
+    "Review and edit build/pdf_data.json after viz_extract to correct any "
+    "misread chart data before direction."
 ))
 
 
@@ -105,6 +108,22 @@ def align(project_path: str) -> str:
     align_result = align_plan(project_path)
     timing_result = recompute_timing(project_path)
     return align_result + "\n\n" + timing_result
+
+
+@mcp.tool()
+def viz_extract(project_path: str) -> str:
+    """Extract chart/table data from the source PDF into build/pdf_data.json.
+
+    Decodes every chart and table across spec.pdf (and slide_deck.pdf if
+    present) into primitive-compatible JSON. Writes build/pdf_data.json
+    and a .pdfhash sidecar — re-runs skip when PDFs haven't changed.
+    Review and edit pdf_data.json before direct_prepare consumes it to fix
+    any misread numbers.
+
+    Args:
+        project_path: Path to project directory.
+    """
+    return _viz_extract(project_path)
 
 
 @mcp.tool()
