@@ -35,7 +35,9 @@ Between each step you can review and edit the intermediate artifacts — especia
 
 - **Python 3.10+**
 - **ffmpeg** — for video/audio processing
+- **Apple Silicon (recommended)** — Chatterbox MLX narration and Whisper alignment both use MPS acceleration. Non-Apple-Silicon hosts can fall back to OpenAI TTS for narration.
 - **An MCP host** (Claude Code, Claude Desktop, or any MCP-compatible client) — drives chapter planning via `plan_prepare` / `plan_apply`
+- **TeX Live** with the `standalone` package — required for Manim primitives that render LaTeX (`bar_chart`, `line_chart`). Install via `sudo tlmgr install standalone` or use `svg_reveal` on pre-rendered chart SVGs to avoid LaTeX entirely.
 - **An OpenAI API key** — *optional*, only needed if you fall back to OpenAI TTS for narration. Chatterbox (local) is the default.
 
 ## Voice Engines
@@ -44,13 +46,9 @@ docu-gen supports two TTS engines. **Chatterbox is recommended** for production 
 
 ### Chatterbox (recommended — local)
 
-[Chatterbox](https://github.com/resemble-ai/chatterbox) runs on-device via MLX (Apple Silicon) or PyTorch. No API key needed for narration. Clone any voice from a short reference clip.
+[Chatterbox](https://github.com/resemble-ai/chatterbox) runs on-device via MLX (Apple Silicon). No API key needed for narration. Clone any voice from a short reference clip.
 
-```bash
-pip install chatterbox-tts    # PyTorch
-# or
-pip install chatterbox-mlx    # Apple Silicon (MPS acceleration)
-```
+The `chatterbox-mlx` dependency is pinned in `pyproject.toml` and installed automatically when you `pip install -e .`. Non-Apple-Silicon hosts should switch `voice.engine` to `openai` in `config.yaml` instead.
 
 Configure in your project's `config.yaml`:
 
@@ -66,7 +64,7 @@ voice:
     dry_wet: 0.2                   # Effect mix (0.0 = dry, 1.0 = full effect)
 ```
 
-> **Tip:** Keep exaggeration clamped relative to clip word count for natural delivery — short phrases (< 5 words) stay under 0.30, medium (< 15 words) under 0.50.
+> **Tip (empirically calibrated against `robo.flac`):** Only 1-word clips need a hard exaggeration cap (≤ 0.25). 2-word clips have bimodal sweet spots at ~0.35 and ~0.55 and work in the 0.30–0.60 range. 3+ word clips tolerate the full 0.15–0.70 range. See `.claude/skills/narration-tone/SKILL.md` for details and `scripts/calibrate_chatterbox.py` to re-derive against your own voice.
 
 ### OpenAI TTS (cloud — fallback)
 
@@ -85,13 +83,9 @@ voice:
 
 ## Whisper Alignment (local)
 
-The `align` tool uses [OpenAI Whisper](https://github.com/openai/whisper) locally to transcribe each narration clip, then cross-correlates the transcription against the ground-truth text to produce word-level timestamps. These timestamps drive visual sync — animation cues, text reveals, and data transitions all key off `word_times` in `clips.json`.
+The `align` step (invoked automatically at the end of `narrate`) uses [OpenAI Whisper](https://github.com/openai/whisper) locally to transcribe each narration clip, then cross-correlates the transcription against the ground-truth text to produce word-level timestamps. These timestamps drive visual sync — animation cues, text reveals, and data transitions all key off `word_times` in `clips.json`.
 
-```bash
-pip install openai-whisper
-```
-
-Whisper runs entirely on-device (no API calls). The `small` model is used by default — accurate enough for timestamp alignment while keeping inference fast. On Apple Silicon, it will use MPS acceleration automatically.
+`openai-whisper` is pinned in `pyproject.toml` and installed automatically. Whisper runs entirely on-device (no API calls). The `small` model is used by default — accurate enough for timestamp alignment while keeping inference fast. On Apple Silicon it will use MPS acceleration automatically.
 
 ### Setting up your API key (optional)
 
@@ -113,9 +107,9 @@ cd docu-gen
 python3 -m venv .venv
 .venv/bin/pip install -e .
 
-# Local alignment (Whisper runs through the MCP server's Python, so install
-# into the same venv — not globally)
-.venv/bin/pip install openai-whisper
+# (Optional) install the standalone LaTeX class for bar_chart / line_chart
+# primitives. Without this, use svg_reveal on pre-rendered chart SVGs.
+sudo tlmgr install standalone
 
 # Register the MCP server with Claude Code
 cp example.mcp.json .mcp.json

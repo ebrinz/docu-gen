@@ -180,12 +180,34 @@ def _stitch_from_clips(project_path: Path) -> str:
     build_dir = project_path / "build"
     clips_data = json.loads((build_dir / "clips.json").read_text())
 
-    # Concat video clips
-    concat_file = _build_concat_file(project_path, clips_data)
+    # Concat video clips — Manim-produced MP4s carry non-monotonic DTS that
+    # the mp4 concat demuxer inflates into a bogus container duration. Convert
+    # each clip to an MPEG-TS intermediate (which resets timestamps), then
+    # concat via the `concat:` protocol with -c copy. This is ffmpeg's
+    # canonical solution for timestamp-clean mp4 concatenation.
+    clips_dir = project_path / "build" / "clips"
+    ts_dir = build_dir / "_ts"
+    ts_dir.mkdir(exist_ok=True)
+    ts_paths = []
+    for chapter in clips_data["chapters"]:
+        for clip in chapter["clips"]:
+            src = clips_dir / f"{clip['clip_id']}.mp4"
+            if not src.exists():
+                continue
+            ts = ts_dir / f"{clip['clip_id']}.ts"
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(src),
+                 "-c", "copy", "-bsf:v", "h264_mp4toannexb",
+                 "-f", "mpegts", str(ts)],
+                capture_output=True, text=True, check=True,
+            )
+            ts_paths.append(ts)
+    concat_arg = "concat:" + "|".join(str(p) for p in ts_paths)
     concat_video = build_dir / "concat.mp4"
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-         "-i", str(concat_file), "-c", "copy", str(concat_video)],
+        ["ffmpeg", "-y", "-i", concat_arg,
+         "-c", "copy", "-bsf:a", "aac_adtstoasc",
+         str(concat_video)],
         capture_output=True, text=True, check=True,
     )
     video_duration = _get_video_duration(concat_video)
@@ -249,7 +271,9 @@ def _stitch_from_clips(project_path: Path) -> str:
         capture_output=True, text=True, check=True,
     )
 
-    concat_file.unlink(missing_ok=True)
+    for ts in ts_paths:
+        ts.unlink(missing_ok=True)
+    ts_dir.rmdir()
     concat_video.unlink(missing_ok=True)
 
     return f"Final video: {final_path} ({video_duration:.1f}s)"
