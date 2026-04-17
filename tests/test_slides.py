@@ -1,25 +1,35 @@
-"""Tests for slide type registry."""
-import pytest
-from docugen.themes.slides import SLIDE_REGISTRY, validate_slide_type, validate_cue_event
+"""Slide type registry — auto-populated from primitives package."""
+from docugen.themes.slides import (
+    SLIDE_REGISTRY, validate_slide_type, validate_cue_event,
+    get_slide_types_prompt,
+)
+
+EXPECTED_PRIMITIVES = {
+    # phase 1 MVP
+    "bar_chart", "counter", "before_after", "callout",
+    "line_chart", "tree", "timeline", "llm_custom",
+    # migrated content primitives
+    "title", "chapter_card", "ambient_field", "svg_reveal", "photo_organism",
+    # deprecated back-compat
+    "dot_merge", "remove_reveal",
+}
 
 
-def test_registry_has_all_types():
-    expected = {
-        "title", "chapter_card", "svg_reveal", "photo_organism",
-        "counter_sync", "bar_chart_build", "before_after",
-        "dot_merge", "remove_reveal", "data_text", "ambient_field",
-    }
-    assert set(SLIDE_REGISTRY.keys()) == expected
+def test_registry_has_expected_primitives():
+    assert set(SLIDE_REGISTRY.keys()) >= EXPECTED_PRIMITIVES
 
 
-def test_each_type_has_events():
-    for slide_type, info in SLIDE_REGISTRY.items():
-        assert "events" in info, f"{slide_type} missing events"
+def test_every_entry_has_description_and_events():
+    for name, info in SLIDE_REGISTRY.items():
+        assert "description" in info
+        assert "events" in info
         assert isinstance(info["events"], set)
+        assert "spans" in info
 
 
 def test_validate_slide_type_valid():
-    assert validate_slide_type("title") is True
+    assert validate_slide_type("line_chart") is True
+    assert validate_slide_type("counter") is True
 
 
 def test_validate_slide_type_invalid():
@@ -27,21 +37,20 @@ def test_validate_slide_type_invalid():
 
 
 def test_validate_cue_event_valid():
-    assert validate_cue_event("title", "reveal_title") is True
+    assert validate_cue_event("line_chart", "draw_line") is True
+    assert validate_cue_event("tree", "reveal_root") is True
 
 
 def test_validate_cue_event_invalid():
-    assert validate_cue_event("title", "explode") is False
+    assert validate_cue_event("line_chart", "explode") is False
 
 
-def test_validate_cue_event_ambient_field_has_no_events():
-    assert validate_cue_event("ambient_field", "anything") is False
+def test_prompt_mentions_deprecated():
+    text = get_slide_types_prompt()
+    assert "DEPRECATED" in text or "deprecated" in text
 
 
-def test_slide_registry_has_dag_hints():
-    photo = SLIDE_REGISTRY["photo_organism"]
-    assert "needs_content" in photo
-    assert photo["needs_content"] is True
-
-    counter = SLIDE_REGISTRY["counter_sync"]
-    assert counter.get("needs_content", False) is False
+def test_prompt_lists_all_primitives():
+    text = get_slide_types_prompt()
+    for name in EXPECTED_PRIMITIVES:
+        assert name in text

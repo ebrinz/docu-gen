@@ -7,8 +7,9 @@ from docugen.direct import validate_clip_direction, validate_all_clips
 @pytest.fixture
 def valid_direction():
     return {
-        "slide_type": "counter_sync",
+        "slide_type": "counter",
         "assets": [],
+        "data": {"to": 420},
         "cue_words": [
             {"word": "billion", "at_index": 2, "event": "start_count",
              "params": {"to": 420, "color": "gold"}}
