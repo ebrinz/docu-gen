@@ -142,16 +142,18 @@ def test_biopunk_choreo_counter_uses_word_times():
         ],
         "visuals": {
             "slide_type": "counter_sync",
+            "data": {"to": 420, "suffix": "compounds"},
             "cue_words": [
                 {"event": "start_count", "at_index": 2,
-                 "params": {"to": 420, "color": "gold", "label": "compounds"}},
+                 "params": {}},
             ],
             "assets": [],
         },
     }
     code = theme.render_choreography(clip, 5.0, "/fake")
-    assert "0.6" in code or "self.wait" in code
+    # counter primitive uses ValueTracker + tracker.animate.set_value(to_val)
     assert "420" in code
+    assert "tracker" in code
 
 
 def test_biopunk_choreo_data_text_multiline():
@@ -170,15 +172,16 @@ def test_biopunk_choreo_data_text_multiline():
         ],
         "visuals": {
             "slide_type": "data_text",
+            "data": {"primary": "1 compound \u00b7 $2B \u00b7 10 years"},
             "cue_words": [
-                {"event": "show_text", "at_index": 0,
-                 "params": {"text": "1 compound \u00b7 $2B \u00b7 10 years"}},
+                {"event": "show_primary", "at_index": 0, "params": {}},
             ],
             "assets": [],
         },
     }
     code = theme.render_choreography(clip, 5.0, "/fake")
-    assert "1 compound" in code or "item_" in code
+    # callout primitive (data_text alias) renders primary as Text(...)
+    assert "1 compound" in code
 
 
 def test_biopunk_choreo_organism_uses_layers():

@@ -87,3 +87,42 @@ def test_biopunk_chapter_layers_returns_callables():
     assert isinstance(layers, dict)
     for name, fn in layers.items():
         assert callable(fn)
+
+
+def test_biopunk_dispatches_to_primitive():
+    theme = load_theme("biopunk")
+    clip = {
+        "clip_id": "x", "text": "hello",
+        "word_times": [{"word": "hello", "start": 0, "end": 0.3}],
+        "visuals": {"slide_type": "callout",
+                    "data": {"primary": "TEST"},
+                    "cue_words": [{"event": "show_primary", "at_index": 0,
+                                   "params": {}}]},
+    }
+    body = theme.render_choreography(clip, duration=3.0, images_dir="/tmp")
+    assert "TEST" in body
+
+
+def test_biopunk_resolves_legacy_alias():
+    """counter_sync should dispatch to counter primitive."""
+    theme = load_theme("biopunk")
+    clip = {
+        "clip_id": "x", "text": "",
+        "word_times": [{"word": "x", "start": 0, "end": 0.3}],
+        "visuals": {"slide_type": "counter_sync",
+                    "data": {"to": 420},
+                    "cue_words": [{"event": "start_count", "at_index": 0,
+                                   "params": {}}]},
+    }
+    body = theme.render_choreography(clip, duration=5.0, images_dir="/tmp")
+    assert "tracker" in body  # counter primitive uses ValueTracker
+
+
+def test_biopunk_unknown_slide_type_falls_back():
+    theme = load_theme("biopunk")
+    clip = {"clip_id": "x", "text": "",
+            "word_times": [],
+            "visuals": {"slide_type": "bogus_type", "data": {}}}
+    body = theme.render_choreography(clip, duration=3.0, images_dir="/tmp")
+    # Fallback should produce an alive_wait hold, not a crash
+    assert "alive_wait" in body
