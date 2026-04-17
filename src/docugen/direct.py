@@ -15,7 +15,10 @@ from docugen.config import load_config
 from docugen.timing import compute_clip_timing, get_wav_duration
 from docugen.themes.slides import (
     validate_slide_type, validate_cue_event, get_slide_types_prompt,
+    PRIMITIVE_ALIASES,
 )
+from docugen.themes.primitives import discover_primitives
+from docugen.themes.primitives._base import validate_schema
 
 REQUIRED_FIELDS = {"slide_type", "assets", "cue_words", "layout",
                    "transition_in", "transition_out", "transition_sound"}
@@ -72,6 +75,25 @@ def validate_clip_direction(direction: dict, clip: dict,
     sound = direction.get("transition_sound")
     if sound is not None and sound not in THEME_SOUNDS:
         errors.append(f"{clip_id}: invalid transition_sound '{sound}'")
+
+    # Primitive schema validation — resolves aliases first, then checks
+    # clip.visuals.data against the primitive's DATA_SCHEMA.
+    if slide_type:
+        resolved = PRIMITIVE_ALIASES.get(slide_type, slide_type)
+        primitives = discover_primitives()
+        mod = primitives.get(resolved)
+        if mod is not None:
+            data = direction.get("data")
+            if data is None:
+                if mod.DATA_SCHEMA.get("required"):
+                    errors.append(
+                        f"{clip_id}: missing 'data' block required by "
+                        f"primitive {resolved!r}"
+                    )
+            else:
+                errors.extend(
+                    validate_schema(data, mod.DATA_SCHEMA, f"{clip_id}.data")
+                )
 
     return errors
 
