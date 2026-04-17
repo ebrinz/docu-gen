@@ -34,6 +34,31 @@ def _build_registry() -> dict:
 
 SLIDE_REGISTRY = _build_registry()
 
+# Back-compat aliases for legacy slide type names. Aliases mirror their target
+# primitive's registry entry so schemas, descriptions, and spans all line up —
+# existing clips.json files that still use the old names continue to render
+# and validate. The primitive dispatcher resolves these aliases before calling
+# into themes/primitives/.
+_LEGACY_CUE_EVENTS = {
+    "counter_sync": {"start_count", "hold"},
+    "bar_chart_build": {"show_bar"},
+    "data_text": {"show_text"},
+}
+
+PRIMITIVE_ALIASES = {
+    "data_text": "callout",
+    "counter_sync": "counter",
+    "bar_chart_build": "bar_chart",
+}
+
+for _alias, _target in PRIMITIVE_ALIASES.items():
+    if _target in SLIDE_REGISTRY and _alias not in SLIDE_REGISTRY:
+        SLIDE_REGISTRY[_alias] = dict(SLIDE_REGISTRY[_target])
+        SLIDE_REGISTRY[_alias]["events"] = (
+            set(SLIDE_REGISTRY[_alias]["events"]) |
+            _LEGACY_CUE_EVENTS.get(_alias, set())
+        )
+
 
 def validate_slide_type(slide_type: str) -> bool:
     return slide_type in SLIDE_REGISTRY
