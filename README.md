@@ -106,18 +106,24 @@ Add this to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.) so it persists ac
 ```bash
 git clone https://github.com/ebrinz/docu-gen.git
 cd docu-gen
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
 
-# Local voice + alignment (recommended)
-pip install chatterbox-mlx     # or chatterbox-tts for PyTorch
-pip install openai-whisper
+# Create a project-local venv (required — .mcp.json points at .venv/bin/python)
+python3 -m venv .venv
+.venv/bin/pip install -e .
 
+# Local alignment (Whisper runs through the MCP server's Python, so install
+# into the same venv — not globally)
+.venv/bin/pip install openai-whisper
+
+# Register the MCP server with Claude Code
 cp example.mcp.json .mcp.json
 ```
 
 Then open a Claude Code session in the `docu-gen` directory and start prompting. The `docugen` tools will be available automatically.
+
+> **Why a venv?** docugen pulls in Chatterbox, MLX, PyTorch, Manim, and a few other heavy deps. Keeping them in `.venv/` prevents version clashes with other Python projects, and `.mcp.json` always points at an absolute path inside this repo so Claude Code can spawn the server consistently.
+>
+> **After adding a dep or editing the tool registry:** re-run `.venv/bin/pip install -e .` (picks up pyproject changes) and then restart your Claude Code session so the MCP server reconnects with the new tools.
 
 ## Connecting to Claude Code
 
@@ -130,6 +136,11 @@ cp example.mcp.json .mcp.json
 That's it. The next time you start a Claude Code session in this directory, the `docugen` tools will be available.
 
 > **Note:** `.mcp.json` is gitignored so your local copy won't interfere with the repo.
+
+**Troubleshooting — "Failed to reconnect to docugen":**
+- Check that `.venv/bin/python` exists and is executable: `ls -l .venv/bin/python`.
+- Check that docugen is installed in that venv: `.venv/bin/python -c "from docugen.server import mcp"` should print nothing (no error).
+- If your `.mcp.json` has an absolute path to a venv that was moved or deleted, copy `example.mcp.json` over it again and restart Claude Code.
 
 ### Other MCP Clients
 
