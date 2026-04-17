@@ -39,5 +39,7 @@ def init_project(project_name: str, theme: str = "biopunk") -> str:
         f"Project created: {project_path}\n"
         f"Theme: {theme}\n"
         f"Available themes: {', '.join(available)}\n\n"
-        f"Next: add spec.pdf + images, then run plan -> split -> narrate -> render -> score -> stitch"
+        f"Next: add spec.pdf + images, then run plan_prepare -> plan_apply -> "
+        f"split -> narrate -> viz_extract -> direct_prepare -> direct_apply -> "
+        f"spot -> render -> score -> stitch"
     )

@@ -3,7 +3,7 @@
 from mcp.server.fastmcp import FastMCP
 
 from docugen.tools.init_project import init_project
-from docugen.tools.plan import extract_pdf_text, generate_plan
+from docugen.tools.plan import plan_prepare as _plan_prepare, plan_apply as _plan_apply
 from docugen.split import split_plan
 from docugen.align import align_plan
 from docugen.tools.narrate import generate_narration
@@ -16,7 +16,10 @@ from docugen.spot import spot_project
 
 mcp = FastMCP("docugen", instructions=(
     "Documentary generation pipeline. Use tools in order: "
-    "init -> plan -> split -> narrate -> viz_extract -> direct_prepare -> direct_apply -> spot -> render -> score -> stitch. "
+    "init -> plan_prepare -> plan_apply -> split -> narrate -> viz_extract -> "
+    "direct_prepare -> direct_apply -> spot -> render -> score -> stitch. "
+    "plan_prepare gathers PDF text + creative direction and returns context; "
+    "you (the MCP host) reason on it and call plan_apply with the plan JSON. "
     "Use title to generate a standalone title card. "
     "Review and edit clips.json between steps to adjust "
     "emotion, pacing, visual direction, and cue words per clip. "
@@ -39,17 +42,28 @@ def init(project_name: str, theme: str = "biopunk") -> str:
 
 
 @mcp.tool()
-def plan(project_path: str) -> str:
-    """Extract text from spec.pdf and generate a chapter plan via AI.
+def plan_prepare(project_path: str) -> str:
+    """Gather context for chapter planning. No API calls.
 
-    Creates build/plan.json with chapter structure, narration scripts,
-    and image assignments.
+    Reads spec.pdf (or slide_deck.pdf), prompt.txt, and images/; returns a
+    formatted blob for the MCP host to reason about. The host then calls
+    plan_apply with the produced plan JSON.
 
     Args:
         project_path: Path to project directory.
     """
-    pdf_text = extract_pdf_text(f"{project_path}/spec.pdf")
-    return generate_plan(project_path, pdf_text=pdf_text)
+    return _plan_prepare(project_path)
+
+
+@mcp.tool()
+def plan_apply(project_path: str, plan_json: str) -> str:
+    """Validate host-authored plan JSON and write build/plan.json.
+
+    Args:
+        project_path: Path to project directory.
+        plan_json: JSON string matching the plan schema (title + chapters).
+    """
+    return _plan_apply(project_path, plan_json)
 
 
 @mcp.tool()

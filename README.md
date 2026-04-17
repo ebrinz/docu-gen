@@ -15,7 +15,8 @@ docu-gen exposes a set of MCP tools designed to run in sequence:
 | Step | Tool | What it does |
 |------|------|-------------|
 | 1 | **`init`** | Creates a new project directory with theme selection and config scaffold |
-| 2 | **`plan`** | Extracts text from your PDF and generates a chapter structure with narration scripts |
+| 2a | **`plan_prepare`** | Reads PDF + `prompt.txt` + `images/` and returns context for the MCP host (Claude) to reason about |
+| 2b | **`plan_apply`** | Validates the host-authored plan JSON and writes `build/plan.json` |
 | 3 | **`split`** | Breaks chapters into individual clips with emotion tagging, exaggeration levels, and pacing |
 | 4 | **`narrate`** | Generates text-to-speech audio for each clip (OpenAI TTS or Chatterbox — see below) |
 | 5 | **`align`** | Runs Whisper on each clip's audio to produce word-level timestamps for visual sync |
@@ -34,7 +35,8 @@ Between each step you can review and edit the intermediate artifacts — especia
 
 - **Python 3.10+**
 - **ffmpeg** — for video/audio processing
-- **An OpenAI API key** — used for plan generation (GPT-4o) and optionally narration (TTS)
+- **An MCP host** (Claude Code, Claude Desktop, or any MCP-compatible client) — drives chapter planning via `plan_prepare` / `plan_apply`
+- **An OpenAI API key** — *optional*, only needed if you fall back to OpenAI TTS for narration. Chatterbox (local) is the default.
 
 ## Voice Engines
 
@@ -66,9 +68,9 @@ voice:
 
 > **Tip:** Keep exaggeration clamped relative to clip word count for natural delivery — short phrases (< 5 words) stay under 0.30, medium (< 15 words) under 0.50.
 
-### OpenAI TTS (cloud)
+### OpenAI TTS (cloud — fallback)
 
-Uses the OpenAI API. Simpler setup, but requires a network connection and API credits.
+Remote fallback for non-Apple-Silicon hosts or when you don't want to run a local model. Requires a network connection and API credits.
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -91,9 +93,9 @@ pip install openai-whisper
 
 Whisper runs entirely on-device (no API calls). The `small` model is used by default — accurate enough for timestamp alignment while keeping inference fast. On Apple Silicon, it will use MPS acceleration automatically.
 
-### Setting up your API key
+### Setting up your API key (optional)
 
-The `plan` tool calls the OpenAI API for chapter generation. If using OpenAI TTS for narration, the same key is used there too.
+Only required if you opt into OpenAI TTS. Planning runs through your MCP host (Claude), not the OpenAI API.
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -185,8 +187,12 @@ Once connected to your MCP client, use the tools in order. Each tool takes the p
 → init("my-project")
   Creates project scaffold
 
-→ plan("/path/to/my-project")
-  Review and edit build/plan.json
+→ plan_prepare("/path/to/my-project")
+  Returns PDF text + creative direction + image list to the MCP host.
+  Host (Claude) composes the plan JSON.
+
+→ plan_apply("/path/to/my-project", <plan_json>)
+  Validates + writes build/plan.json. Review and edit before split.
 
 → split("/path/to/my-project")
   Review and edit build/clips.json — tune emotion, pacing, visuals per clip
