@@ -135,8 +135,11 @@ def _generate_chatterbox(voice_config: dict, text: str,
 # ---------------------------------------------------------------------------
 # Short clip consolidation (Chatterbox)
 # ---------------------------------------------------------------------------
-
-SHORT_WORD_LIMIT = 6
+# Thresholds calibrated via scripts/calibrate_chatterbox.py against robo.flac.
+# Only 1-word clips are truly constrained; 2-word clips have bimodal sweet
+# spots around 0.35 and 0.55 but work acceptably in 0.30-0.60; 3+ word clips
+# tolerate the full exaggeration range.
+SHORT_WORD_LIMIT = 1
 HIGH_EXAGGERATION = 0.3
 
 
