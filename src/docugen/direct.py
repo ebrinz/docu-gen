@@ -31,6 +31,23 @@ THEME_SOUNDS = {
 }
 
 
+def _schema_default(obj):
+    """JSON serializer for DATA_SCHEMA values.
+
+    DATA_SCHEMA carries Python `type` objects in its `types` field and tuples
+    of types for multi-type fields; sets appear in `enums`. Convert each to
+    a human-readable string or list so json.dumps can render it for the MCP
+    client.
+    """
+    if isinstance(obj, type):
+        return obj.__name__
+    if isinstance(obj, tuple):
+        return [_schema_default(x) if isinstance(x, type) else x for x in obj]
+    if isinstance(obj, set):
+        return sorted(obj)
+    raise TypeError(f"Not JSON-serializable: {type(obj).__name__}")
+
+
 def validate_clip_direction(direction: dict, clip: dict,
                             available_assets: set[str]) -> list[str]:
     """Validate a single clip's visual direction. Returns list of error strings."""
@@ -153,14 +170,44 @@ def direct_prepare(project_path: str | Path) -> str:
     clips_block = "\n".join(sections)
     assets_block = "\n".join(f"  - {a}" for a in available_assets)
 
+    # Per-primitive DATA_SCHEMA — tells the MCP client exactly what to emit
+    primitives = discover_primitives()
+    schema_lines = []
+    for name in sorted(primitives):
+        mod = primitives[name]
+        if getattr(mod, "DEPRECATED", False):
+            continue
+        schema_lines.append(f"\n### {name}")
+        schema_lines.append(f"{mod.DESCRIPTION}")
+        schema_lines.append(
+            "DATA_SCHEMA = " + json.dumps(
+                mod.DATA_SCHEMA, default=_schema_default, indent=2
+            )
+        )
+    schemas_block = "\n".join(schema_lines)
+
+    # Extracted source data (from viz_extract), if available
+    pdf_data_path = build_dir / "pdf_data.json"
+    if pdf_data_path.exists():
+        pdf_block = pdf_data_path.read_text()
+    else:
+        pdf_block = (
+            "No extracted data available — pdf_data.json missing. "
+            "Run viz_extract first, or fall back to narration inference / llm_custom."
+        )
+
     return (
         f"# Creative Direction Context\n\n"
         f"## Available Slide Types\n{slide_types_desc}\n\n"
+        f"## Primitive Data Schemas\n{schemas_block}\n\n"
+        f"## Extracted Source Data (pdf_data.json)\n```json\n{pdf_block}\n```\n\n"
         f"## Available Assets\n{assets_block}\n\n"
         f"## Clips Needing Direction\n{clips_block}\n\n"
         f"## Output Format\n"
         f"Provide a JSON object where keys are clip_ids and values have:\n"
-        f"- slide_type: one of the types above\n"
+        f"- slide_type: one of the types above (prefer typed primitives; use "
+        f"llm_custom only when nothing fits)\n"
+        f"- data: object matching the primitive's DATA_SCHEMA\n"
         f"- assets: list of filenames from available assets (empty if none)\n"
         f"- cue_words: list of {{\"word\": \"...\", \"at_index\": N, \"event\": \"...\", \"params\": {{}}}}\n"
         f"- layout: center | split_left_right | bottom_third | full_bleed\n"
