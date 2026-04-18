@@ -44,3 +44,31 @@ def test_storyboard_handles_silent_clip_without_wav(project):
     # intro_02 has no narration WAV; should not error
     generate_storyboard_preview(project)
     assert (project / "build" / "storyboard.mp4").exists()
+
+
+def test_storyboard_overlay_renders_pixels(project):
+    """Verify the overlay banner actually rendered — top strip is not pure black."""
+    from PIL import Image
+    import subprocess
+
+    generate_storyboard_preview(project)
+    storyboard = project / "build" / "storyboard.mp4"
+
+    frame_path = project / "build" / "probe_frame.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-ss", "1.0", "-i", str(storyboard),
+         "-vframes", "1", str(frame_path)],
+        capture_output=True, text=True, check=True,
+    )
+
+    img = Image.open(frame_path).convert("RGB")
+    w, h = img.size
+    # Crop the top banner region where header text is drawn (y=18, fontsize≈36)
+    banner = img.crop((60, 10, w - 60, 110))
+    # Compute mean brightness; pure black banner = overlay failed to render
+    pixels = list(banner.getdata())
+    mean_brightness = sum(sum(p) for p in pixels) / (len(pixels) * 3)
+    assert mean_brightness > 5, (
+        f"banner appears black (mean brightness {mean_brightness:.2f}); "
+        f"overlay likely did not render"
+    )

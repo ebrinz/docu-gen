@@ -8,6 +8,8 @@ dependency) then composites them via ffmpeg's overlay filter.
 """
 
 import json
+import os
+import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -17,24 +19,34 @@ from PIL import Image, ImageDraw, ImageFont
 
 # ---- font resolution --------------------------------------------------------
 
-_FONT_CANDIDATES = [
-    "/System/Library/Fonts/Supplemental/Verdana Bold.ttf",
-    "/System/Library/Fonts/Geneva.ttf",
-    "/System/Library/Fonts/Menlo.ttc",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-]
+def _font_candidates() -> list[str]:
+    candidates = []
+    env_font = os.environ.get("DOCUGEN_FONT")
+    if env_font:
+        candidates.append(env_font)
+    candidates += [
+        "/System/Library/Fonts/Supplemental/Verdana Bold.ttf",
+        "/System/Library/Fonts/Geneva.ttf",
+        "/System/Library/Fonts/Menlo.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    ]
+    return candidates
 
 
-def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    for path in _FONT_CANDIDATES:
+def _load_font(size: int) -> ImageFont.FreeTypeFont:
+    for path in _font_candidates():
         if Path(path).exists():
             try:
                 return ImageFont.truetype(path, size)
             except Exception:
                 continue
-    return ImageFont.load_default()
+    raise RuntimeError(
+        "storyboard_preview: no usable TTF font found. "
+        "Install a system font (e.g. dejavu-fonts on Linux) or set "
+        "DOCUGEN_FONT=/path/to/font.ttf"
+    )
 
 
 # ---- text helpers -----------------------------------------------------------
@@ -194,7 +206,9 @@ def generate_storyboard_preview(project_path: str | Path) -> str:
     base_dir = build / "base"
     narr_dir = build / "narration"
     work_dir = build / "_storyboard"
-    work_dir.mkdir(parents=True, exist_ok=True)
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    work_dir.mkdir(parents=True)
 
     clips_data = json.loads((build / "clips.json").read_text())
 
