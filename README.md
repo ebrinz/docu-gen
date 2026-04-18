@@ -20,16 +20,37 @@ docu-gen exposes a set of MCP tools designed to run in sequence:
 | 3 | **`split`** | Breaks chapters into individual clips with emotion tagging, exaggeration levels, and pacing |
 | 4 | **`narrate`** | Generates text-to-speech audio for each clip (OpenAI TTS or Chatterbox — see below) |
 | 5 | **`align`** | Runs Whisper on each clip's audio to produce word-level timestamps for visual sync |
-| 6 | **`viz_extract`** | Reads the source PDF via vision, writes structured chart/table data to `build/pdf_data.json` for the direction step to draw on |
-| 7a | **`direct_prepare`** | Gathers production plan visuals, clips, assets, primitive schemas, and extracted PDF data; returns context for creative direction |
-| 7b | **`direct_apply`** | Validates creative direction JSON (including per-primitive schema validation), computes WAV-derived timing, writes back to clips.json |
+| 6 | **`base_clips`** | Generate silent black MP4 per clip at exactly `clip.timing.clip_duration` — the duration contract that `composite` enforces |
+| 7 | **`storyboard_preview`** | Emit `build/storyboard.mp4` with clip id + content tag + subtitle overlays for end-to-end timing review before Manim compute |
+| 8 | **`viz_extract`** | Reads the source PDF via vision, writes structured chart/table data to `build/pdf_data.json` for the direction step to draw on |
+| 9a | **`direct_prepare`** | Gathers production plan visuals, clips, assets, primitive schemas, and extracted PDF data; returns context for creative direction |
+| 9b | **`direct_apply`** | Validates creative direction JSON (including per-primitive schema validation), computes WAV-derived timing, writes back to clips.json |
 | — | **`title`** | Optional standalone tool: generate a title card (particle, glitch, trace, or typewriter style) |
-| 8 | **`spot`** | Builds `build/cue_sheet.json` — per-cue audio spans (tension builds, stings, sweeps, ticks) timed to clip narration |
-| 9 | **`render`** | Creates animated video scenes per clip using [Manim](https://www.manim.community/) and the project's theme |
-| 10 | **`score`** | Generates a synthesized ambient drone score with per-chapter layers and transition sounds |
-| 11 | **`stitch`** | Assembles clips, mixes narration with score (voice-activated ducking), outputs final MP4 |
+| 10 | **`spot`** | Builds `build/cue_sheet.json` — per-cue audio spans (tension builds, stings, sweeps, ticks) timed to clip narration |
+| 11 | **`render`** | Creates animated video scenes per clip using [Manim](https://www.manim.community/) and the project's theme; writes to `build/frames/<id>.mp4` |
+| 12 | **`composite`** | Overlay Manim render onto base clip, mux narration, force output duration = `clip_duration` via `ffmpeg -t`. Makes audio/visual drift structurally impossible |
+| 13 | **`score`** | Generates a synthesized ambient drone score with per-chapter layers and transition sounds |
+| 14 | **`stitch`** | Assembles clips, mixes narration with score (voice-activated ducking), outputs final MP4; auto-invokes `title` if `build/title.mp4` is missing |
 
 Between each step you can review and edit the intermediate artifacts — especially `build/clips.json` after split, where you can tune emotion, pacing, and visual direction per clip before proceeding.
+
+### Audio-first timeline
+
+Narration is the authoritative timeline. `base_clips` emits a silent black
+MP4 per clip at exactly `clip.timing.clip_duration`. Manim renders to
+`build/frames/<id>.mp4`; `composite` overlays Manim onto the base, muxes
+the narration WAV, and forces `-t clip_duration`. Drift is structurally
+impossible — every clip in `build/clips/<id>.mp4` has exactly the duration
+the audio demands.
+
+### Storyboard preview (review gate)
+
+Between narrate and direct, run `storyboard_preview` to produce
+`build/storyboard.mp4`: each clip shows its index, a content tag
+(scene_type · primitive · assets), and a subtitle over the base clip.
+Review timing end-to-end before spending compute on direction and Manim
+rendering — if the audio or pacing feels wrong, fix it in `clips.json` and
+rerun from narrate instead of discovering the problem after rendering.
 
 ## Prerequisites
 
@@ -197,6 +218,12 @@ Once connected to your MCP client, use the tools in order. Each tool takes the p
 → align("/path/to/my-project")
   Adds word_times to clips.json — word-level timestamps via Whisper
 
+→ base_clips("/path/to/my-project")
+  Generates silent black MP4s at clip_duration — the timing contract
+
+→ storyboard_preview("/path/to/my-project")
+  Review build/storyboard.mp4 — timing, pacing, and content tags before Manim
+
 → viz_extract("/path/to/my-project")
   Decodes charts/tables from spec.pdf into build/pdf_data.json — review and fix
   any misread numbers before direct_prepare consumes it
@@ -216,7 +243,10 @@ Once connected to your MCP client, use the tools in order. Each tool takes the p
   Build audio cue sheet from cue_words + slide_type spans
 
 → render("/path/to/my-project")
-  Preview build/clips/*.mp4 — Manim scenes per clip
+  Manim scenes per clip — writes to build/frames/<id>.mp4
+
+→ composite("/path/to/my-project")
+  Overlays Manim onto base clips, muxes narration, enforces clip_duration — writes build/clips/<id>.mp4
 
 → score("/path/to/my-project")
   Check build/score.wav — ambient drone with chapter transitions
@@ -265,7 +295,7 @@ focused — one concept per chapter. Use the banner image for intro and outro.
 
 ```
 src/docugen/
-├── server.py              # MCP server — 9 tools exposed via stdio
+├── server.py              # MCP server — 14 tools exposed via stdio
 ├── config.py              # Configuration loading & defaults
 ├── split.py               # Chapter → clip splitting, emotion tagging, pacing
 ├── align.py               # Whisper transcription → word-level timestamp alignment
