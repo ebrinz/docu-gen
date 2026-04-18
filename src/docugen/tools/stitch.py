@@ -9,6 +9,7 @@ from scipy.io import wavfile
 from scipy.signal import lfilter
 
 from docugen.config import load_config
+from docugen.tools.title import generate_title
 # drone import removed — score tool handles generation now
 
 SR = 44100
@@ -125,6 +126,9 @@ def _concatenate_clips(project_path: Path, plan: dict) -> Path:
 
     concat_file = build_dir / "concat.txt"
     lines = []
+    title_mp4 = build_dir / "title.mp4"
+    if title_mp4.exists():
+        lines.append(f"file '{title_mp4}'")
     for chapter in plan["chapters"]:
         clip = clips_dir / f"{chapter['id']}.mp4"
         if clip.exists():
@@ -189,6 +193,16 @@ def _stitch_from_clips(project_path: Path) -> str:
     ts_dir = build_dir / "_ts"
     ts_dir.mkdir(exist_ok=True)
     ts_paths = []
+    title_mp4 = build_dir / "title.mp4"
+    if title_mp4.exists():
+        title_ts = ts_dir / "title.ts"
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(title_mp4),
+             "-c", "copy", "-bsf:v", "h264_mp4toannexb",
+             "-f", "mpegts", str(title_ts)],
+            capture_output=True, text=True, check=True,
+        )
+        ts_paths.append(title_ts)
     for chapter in clips_data["chapters"]:
         for clip in chapter["clips"]:
             src = clips_dir / f"{clip['clip_id']}.mp4"
@@ -338,14 +352,31 @@ def _stitch_from_plan(project_path: Path) -> str:
     return f"Final video: {final_path} ({video_duration:.1f}s)"
 
 
+def _ensure_title(project_path: Path) -> None:
+    """Auto-generate build/title.mp4 if missing. Touch build/title.mp4.skip to opt out."""
+    build_dir = project_path / "build"
+    title_mp4 = build_dir / "title.mp4"
+    if title_mp4.exists():
+        return
+    skip_marker = build_dir / "title.mp4.skip"
+    if skip_marker.exists():
+        return
+    generate_title(project_path)
+
+
 def stitch_all(project_path: str | Path) -> str:
     """Assemble clips, narration, and score into final video.
 
     Uses clips.json if available (per-clip assembly with pre-generated score).
     Falls back to plan.json (legacy, generates drone inline).
+
+    Auto-invokes title tool if build/title.mp4 is missing. Touch
+    build/title.mp4.skip to opt out.
     """
     project_path = Path(project_path)
     build_dir = project_path / "build"
+
+    _ensure_title(project_path)
 
     if (build_dir / "clips.json").exists():
         return _stitch_from_clips(project_path)
