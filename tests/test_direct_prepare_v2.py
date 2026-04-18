@@ -58,3 +58,37 @@ def test_prepare_skips_deprecated_primitives_in_schema_block(tmp_path):
     # But they should still appear in the Available Slide Types list (with
     # [DEPRECATED] prefix)
     assert "DEPRECATED" in out
+
+
+def test_prior_directions_included_in_per_clip_context(tmp_path):
+    """Each clip's context must include summaries of preceding clips' direction."""
+    from docugen.direct import prepare_direction_context
+
+    # Minimal project with three clips; first two have direction, third doesn't
+    (tmp_path / "build").mkdir()
+    (tmp_path / "config.yaml").write_text("title: T\n")
+    (tmp_path / "prompt.txt").write_text("prompt\n")
+    (tmp_path / "build" / "plan.json").write_text('{"title":"T","chapters":[]}')
+
+    import json
+    clips = {
+        "chapters": [{
+            "id": "ch1",
+            "clips": [
+                {"clip_id": "ch1_01", "text": "a", "direction": {"slide_type": "banner_intro", "transition_in": "fade"}},
+                {"clip_id": "ch1_02", "text": "b", "direction": {"slide_type": "photo_organism", "transition_in": "cut"}},
+                {"clip_id": "ch1_03", "text": "c"},
+            ],
+        }]
+    }
+    (tmp_path / "build" / "clips.json").write_text(json.dumps(clips))
+
+    ctx = prepare_direction_context(tmp_path)
+    # The third clip's section must reference the first two as prior_directions
+    assert "prior_directions" in ctx.lower() or "prior directions" in ctx.lower()
+    # Both preceding slide_types should appear in the third clip's prior list
+    ch1_03_idx = ctx.find("ch1_03")
+    assert ch1_03_idx > 0
+    slice_after = ctx[ch1_03_idx:ch1_03_idx + 500]
+    assert "banner_intro" in slice_after
+    assert "photo_organism" in slice_after

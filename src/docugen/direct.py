@@ -48,6 +48,24 @@ def _schema_default(obj):
     raise TypeError(f"Not JSON-serializable: {type(obj).__name__}")
 
 
+def _prior_directions_summary(flat_clips: list[dict], current_index: int) -> list[dict]:
+    """Summarize direction decisions made in all preceding clips (flat across chapters).
+
+    Used by direct_prepare to feed the director cross-chapter visual context
+    so they can intentionally choose varied primitives/reveal styles.
+    """
+    priors = []
+    for i in range(current_index):
+        prev = flat_clips[i]
+        d = prev.get("direction") or {}
+        priors.append({
+            "clip_id": prev.get("clip_id"),
+            "slide_type": d.get("slide_type"),
+            "transition_in": d.get("transition_in"),
+        })
+    return priors
+
+
 def validate_clip_direction(direction: dict, clip: dict,
                             available_assets: set[str]) -> list[str]:
     """Validate a single clip's visual direction. Returns list of error strings."""
@@ -143,6 +161,12 @@ def direct_prepare(project_path: str | Path) -> str:
     available_assets = sorted(f.name for f in images_dir.iterdir()) if images_dir.exists() else []
     slide_types_desc = get_slide_types_prompt()
 
+    # Flatten for prior_directions computation (indexed across chapters)
+    flat_clips = []
+    for chapter in clips_data["chapters"]:
+        for clip in chapter["clips"]:
+            flat_clips.append(clip)
+
     sections = []
     for chapter in clips_data["chapters"]:
         ch_id = chapter["id"]
@@ -166,6 +190,11 @@ def direct_prepare(project_path: str | Path) -> str:
             n_words = len(clip.get("word_times", []))
             pacing = clip.get("pacing", "normal")
             sections.append(f"  {cid} [{n_words} words, {pacing}]: {text}")
+            # Index this clip in the flat list
+            clip_global_idx = flat_clips.index(clip)
+            priors = _prior_directions_summary(flat_clips, clip_global_idx)
+            if priors:
+                sections.append(f"    prior_directions: {json.dumps(priors)}")
 
     clips_block = "\n".join(sections)
     assets_block = "\n".join(f"  - {a}" for a in available_assets)
@@ -214,6 +243,9 @@ def direct_prepare(project_path: str | Path) -> str:
         f"- transition_in: crossfade | cut | wipe_left | fade_black\n"
         f"- transition_out: crossfade_next | cut | fade_black\n"
         f"- transition_sound: one of the 8 theme sounds, or null\n"
+        f"\nWhen multiple slide_types or transition_in styles would serve the clip, "
+        f"prefer options that DIFFER from those in prior_directions — variety across "
+        f"adjacent chapters beats uniformity.\n"
     )
 
 
@@ -285,3 +317,7 @@ def direct_apply(project_path: str | Path, direction_json: str) -> str:
     (build_dir / "clips.json").write_text(json.dumps(clips_data, indent=2) + "\n")
     recompute_timing(project_path)
     return f"Directed {applied} clips. Timing computed. All validation passed. clips.json updated."
+
+
+# Alias for external callers that use the more descriptive name
+prepare_direction_context = direct_prepare
