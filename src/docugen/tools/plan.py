@@ -18,6 +18,43 @@ import fitz  # PyMuPDF
 from docugen.config import load_config
 
 
+# Chatterbox short-emotive ban — upstream mirror of narrate.py's
+# SHORT_WORD_LIMIT / HIGH_EXAGGERATION. Values derived from
+# scripts/calibrate_chatterbox.py sweep against robo.flac. Tune both
+# constants together (here and in narrate.py) if the calibration changes.
+SHORT_WORD_CEIL = 1
+HOT_EXAGGERATION_FLOOR = 0.3
+
+
+def _chapter_exaggeration(chapter: dict) -> float | None:
+    """Resolve a chapter's exaggeration override, if any."""
+    return chapter.get("exaggeration")
+
+
+def _validate_short_emotive(plan: dict) -> list[str]:
+    """Reject chapters that combine short narration with high exaggeration.
+
+    Chatterbox calibration shows 1-word clips at exaggeration >= 0.3 are a
+    reliable failure mode. Ban at plan time rather than consolidate downstream
+    so the author fixes the narration.
+    """
+    errors = []
+    for ch in plan.get("chapters", []):
+        text = ch.get("narration", "")
+        word_count = len(text.split())
+        exagg = _chapter_exaggeration(ch)
+        if exagg is None:
+            continue
+        if word_count <= SHORT_WORD_CEIL and exagg >= HOT_EXAGGERATION_FLOOR:
+            errors.append(
+                f"chapter '{ch.get('id','?')}' violates short-emotive ban: "
+                f"{word_count} word(s) at exaggeration {exagg:.2f} "
+                f"(ceiling {SHORT_WORD_CEIL} words, floor {HOT_EXAGGERATION_FLOOR:.2f}). "
+                f"Lengthen narration or drop exaggeration below {HOT_EXAGGERATION_FLOOR:.2f}."
+            )
+    return errors
+
+
 PLAN_SCHEMA_PROMPT = """\
 Return a JSON object matching this schema:
 
@@ -145,9 +182,14 @@ def plan_apply(project_path: str | Path, plan_json: str) -> str:
         plan["title"] = config.get("title", "Untitled Documentary")
 
     errors = _validate_plan(plan)
-    if errors:
-        error_list = "\n".join(f"  - {e}" for e in errors)
-        return f"plan_apply: validation failed:\n{error_list}"
+    short_emotive_errors = _validate_short_emotive(plan)
+    if errors or short_emotive_errors:
+        all_errors = errors + short_emotive_errors
+        error_list = "\n".join(f"  - {e}" for e in all_errors)
+        prefix = "plan_apply: validation failed"
+        if short_emotive_errors and not errors:
+            prefix = "plan_apply: short-emotive ban violations"
+        return f"{prefix}:\n{error_list}"
 
     build_dir = project_path / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -205,3 +247,7 @@ def generate_plan_via_openai(
     )
     plan_text = response.choices[0].message.content
     return plan_apply(project_path, plan_text)
+
+
+# Backward-compat alias — test_plan.py was written against the old name.
+generate_plan = generate_plan_via_openai
