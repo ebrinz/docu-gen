@@ -107,7 +107,7 @@ def render_clip_dag(
 
     project_path = Path(project_path)
     clip_id = clip["clip_id"]
-    clip_dir = project_path / "build" / "clips" / clip_id
+    clip_dir = project_path / "build" / "frames" / clip_id
     clip_dir.mkdir(parents=True, exist_ok=True)
 
     sorted_nodes = topo_sort(dag)
@@ -199,7 +199,7 @@ def render_clip_dag(
     last = sorted_nodes[-1]
     last_key = last["name"]
     if last_key in outputs:
-        final_path = project_path / "build" / "clips" / f"{clip_id}.mp4"
+        final_path = project_path / "build" / "frames" / f"{clip_id}.mp4"
         if final_path != outputs[last_key]:
             import shutil
             shutil.copy2(outputs[last_key], final_path)

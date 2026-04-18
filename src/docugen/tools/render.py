@@ -493,13 +493,13 @@ def render_chapter(project_path: Path, chapter: dict, doc_title: str,
     config = load_config(project_path)
     cid = chapter["id"]
     images_dir = project_path / "images"
-    clips_dir = project_path / "build" / "clips"
-    clips_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir = project_path / "build" / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
 
     script = build_manim_script(chapter, doc_title, duration, images_dir)
     class_name = f"Scene_{cid}"
 
-    script_path = clips_dir / f"_scene_{cid}.py"
+    script_path = frames_dir / f"_scene_{cid}.py"
     script_path.write_text(script)
 
     fps = config["video"]["fps"]
@@ -508,19 +508,19 @@ def render_chapter(project_path: Path, chapter: dict, doc_title: str,
     cmd = [
         "manim", quality,
         str(script_path), class_name,
-        "--media_dir", str(clips_dir / "media"),
+        "--media_dir", str(frames_dir / "media"),
         "--format", "mp4",
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(clips_dir))
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(frames_dir))
     if result.returncode != 0:
         raise RuntimeError(f"Manim render failed for {cid}:\n{result.stderr}")
 
-    output_files = list((clips_dir / "media").rglob(f"{class_name}.mp4"))
+    output_files = list((frames_dir / "media").rglob(f"{class_name}.mp4"))
     if not output_files:
         raise FileNotFoundError(f"Manim output not found for {class_name}")
 
-    final_path = clips_dir / f"{cid}.mp4"
+    final_path = frames_dir / f"{cid}.mp4"
     output_files[0].rename(final_path)
     script_path.unlink(missing_ok=True)
 
