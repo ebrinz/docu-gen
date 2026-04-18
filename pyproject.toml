@@ -32,3 +32,8 @@ docugen = "docugen.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests that run the full ffmpeg pipeline end-to-end",
+]
