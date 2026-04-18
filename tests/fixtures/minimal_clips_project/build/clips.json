@@ -1,0 +1,11 @@
+{
+  "chapters": [
+    {
+      "id": "intro",
+      "clips": [
+        {"clip_id": "intro_01", "text": "Hello world.", "timing": {"clip_duration": 2.5}},
+        {"clip_id": "intro_02", "text": "", "timing": {"clip_duration": 3.0}}
+      ]
+    }
+  ]
+}

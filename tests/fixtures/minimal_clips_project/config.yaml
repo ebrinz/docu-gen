@@ -1,0 +1,7 @@
+title: "Fixture Project"
+video:
+  resolution: 1080p
+  fps: 60
+voice:
+  model: tts-1-hd
+  voice: fable
