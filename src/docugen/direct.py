@@ -66,6 +66,21 @@ def _prior_directions_summary(flat_clips: list[dict], current_index: int) -> lis
     return priors
 
 
+def _variety_warnings(directions: list[dict]) -> list[str]:
+    """Warn when three consecutive clips share the same slide_type or transition_in."""
+    warnings = []
+    for i in range(len(directions) - 2):
+        trio = directions[i:i+3]
+        for field in ("slide_type", "transition_in"):
+            values = [d.get(field) for d in trio]
+            if values[0] is not None and values[0] == values[1] == values[2]:
+                ids = ", ".join(d.get("clip_id", "?") for d in trio)
+                warnings.append(
+                    f"variety: three consecutive clips share {field}={values[0]!r}: {ids}"
+                )
+    return warnings
+
+
 def validate_clip_direction(direction: dict, clip: dict,
                             available_assets: set[str]) -> list[str]:
     """Validate a single clip's visual direction. Returns list of error strings."""
@@ -316,6 +331,17 @@ def direct_apply(project_path: str | Path, direction_json: str) -> str:
 
     (build_dir / "clips.json").write_text(json.dumps(clips_data, indent=2) + "\n")
     recompute_timing(project_path)
+
+    # Non-fatal variety warnings
+    flat_directions = []
+    for chapter in clips_data["chapters"]:
+        for clip in chapter["clips"]:
+            if clip.get("visuals"):
+                flat_directions.append({"clip_id": clip["clip_id"], **clip["visuals"]})
+
+    for w in _variety_warnings(flat_directions):
+        print(f"[variety warning] {w}")
+
     return f"Directed {applied} clips. Timing computed. All validation passed. clips.json updated."
 
 

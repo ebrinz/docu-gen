@@ -99,3 +99,30 @@ def test_validate_all_clips_aggregates_errors():
     errors = validate_all_clips(clips_data, set())
     assert len(errors) > 0
     assert "ch1_01" in errors[0]
+
+
+def test_apply_direction_warns_on_three_same_slide_types():
+    """Three consecutive clips with identical slide_type must emit a warning."""
+    from docugen.direct import _variety_warnings
+
+    directions = [
+        {"clip_id": "ch1", "slide_type": "infographic"},
+        {"clip_id": "ch2", "slide_type": "infographic"},
+        {"clip_id": "ch3", "slide_type": "infographic"},
+        {"clip_id": "ch4", "slide_type": "photo_organism"},
+    ]
+    warnings = _variety_warnings(directions)
+    assert len(warnings) >= 1
+    assert "infographic" in warnings[0]
+    assert "ch1" in warnings[0] and "ch2" in warnings[0] and "ch3" in warnings[0]
+
+
+def test_apply_direction_no_warning_when_broken_up():
+    from docugen.direct import _variety_warnings
+
+    directions = [
+        {"clip_id": "ch1", "slide_type": "infographic"},
+        {"clip_id": "ch2", "slide_type": "photo_organism"},
+        {"clip_id": "ch3", "slide_type": "infographic"},
+    ]
+    assert _variety_warnings(directions) == []
