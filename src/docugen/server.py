@@ -12,6 +12,7 @@ from docugen.tools.score import generate_score
 from docugen.tools.stitch import stitch_all
 from docugen.tools.title import generate_title
 from docugen.tools.base_clips import generate_base_clips
+from docugen.tools.storyboard import generate_storyboard_preview
 from docugen.tools.viz_extract import viz_extract as _viz_extract
 from docugen.spot import spot_project
 
@@ -202,6 +203,19 @@ def base_clips(project_path: str) -> str:
         project_path: Path to project directory.
     """
     return generate_base_clips(project_path)
+
+
+@mcp.tool()
+def storyboard_preview(project_path: str) -> str:
+    """Generate build/storyboard.mp4 — base clips + clip id + content tag + subtitle.
+
+    Run after base_clips to review timing, pacing, and silent-card durations
+    end-to-end before spending compute on Manim rendering.
+
+    Args:
+        project_path: Path to project directory.
+    """
+    return generate_storyboard_preview(project_path)
 
 
 @mcp.tool()

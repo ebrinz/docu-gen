@@ -72,3 +72,9 @@ def test_storyboard_overlay_renders_pixels(project):
         f"banner appears black (mean brightness {mean_brightness:.2f}); "
         f"overlay likely did not render"
     )
+
+
+def test_storyboard_registered_as_mcp_tool():
+    from docugen import server
+    tool_names = [t.name for t in server.mcp._tool_manager.list_tools()]
+    assert "storyboard_preview" in tool_names
