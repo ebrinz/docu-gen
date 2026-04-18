@@ -18,12 +18,12 @@ import fitz  # PyMuPDF
 from docugen.config import load_config
 
 
-# Chatterbox short-emotive ban — upstream mirror of narrate.py's
+# Chatterbox short-emotive ban — mirror of narrate.py's
 # SHORT_WORD_LIMIT / HIGH_EXAGGERATION. Values derived from
 # scripts/calibrate_chatterbox.py sweep against robo.flac. Tune both
 # constants together (here and in narrate.py) if the calibration changes.
-SHORT_WORD_CEIL = 1
-HOT_EXAGGERATION_FLOOR = 0.3
+SHORT_WORD_LIMIT = 1
+HIGH_EXAGGERATION = 0.3
 
 
 def _chapter_exaggeration(chapter: dict) -> float | None:
@@ -45,12 +45,12 @@ def _validate_short_emotive(plan: dict) -> list[str]:
         exagg = _chapter_exaggeration(ch)
         if exagg is None:
             continue
-        if word_count <= SHORT_WORD_CEIL and exagg >= HOT_EXAGGERATION_FLOOR:
+        if word_count <= SHORT_WORD_LIMIT and exagg >= HIGH_EXAGGERATION:
             errors.append(
                 f"chapter '{ch.get('id','?')}' violates short-emotive ban: "
                 f"{word_count} word(s) at exaggeration {exagg:.2f} "
-                f"(ceiling {SHORT_WORD_CEIL} words, floor {HOT_EXAGGERATION_FLOOR:.2f}). "
-                f"Lengthen narration or drop exaggeration below {HOT_EXAGGERATION_FLOOR:.2f}."
+                f"(limit {SHORT_WORD_LIMIT} words, floor {HIGH_EXAGGERATION:.2f}). "
+                f"Lengthen narration or drop exaggeration below {HIGH_EXAGGERATION:.2f}."
             )
     return errors
 

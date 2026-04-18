@@ -88,7 +88,7 @@ def render_node(node, inputs, clip, project_path, theme=None):
     config = load_config(project_path)
     clip_id = clip["clip_id"]
     images_dir = str(project_path / "images")
-    clips_dir = project_path / "build" / "clips" / clip_id
+    clips_dir = project_path / "build" / "frames" / clip_id
     clips_dir.mkdir(parents=True, exist_ok=True)
     media_dir = clips_dir / "media"
 

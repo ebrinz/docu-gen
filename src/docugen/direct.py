@@ -9,6 +9,7 @@ does all reasoning in conversation. This module only:
 """
 
 import json
+import sys
 from pathlib import Path
 
 from docugen.config import load_config
@@ -340,7 +341,7 @@ def direct_apply(project_path: str | Path, direction_json: str) -> str:
                 flat_directions.append({"clip_id": clip["clip_id"], **clip["visuals"]})
 
     for w in _variety_warnings(flat_directions):
-        print(f"[variety warning] {w}")
+        print(f"[variety warning] {w}", file=sys.stderr)
 
     return f"Directed {applied} clips. Timing computed. All validation passed. clips.json updated."
 

@@ -44,7 +44,7 @@ def test_render_node_writes_script_and_invokes_manim(mock_run, mock_cfg, tmp_pat
 
     # Mocked manim creates its output file as a side effect of being "run".
     def fake_manim(cmd, capture_output=True, text=True):
-        media_dir = Path(tmp_path) / "build" / "clips" / "test_01" / "media"
+        media_dir = Path(tmp_path) / "build" / "frames" / "test_01" / "media"
         out_dir = media_dir / "videos" / "_scene" / "480p15"
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "Scene_test_01.mp4").write_bytes(b"fakevideo")
