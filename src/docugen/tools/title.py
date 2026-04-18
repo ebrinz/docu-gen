@@ -437,13 +437,13 @@ def generate_title(project_path: str | Path, reveal_style: str = "particle",
 
     1. Reads config and production plan for defaults
     2. Calls build_title_script to generate the Manim script
-    3. Writes script to build/clips/_scene_title.py
+    3. Writes script to build/_scene_title.py
     4. Runs manim subprocess to render
-    5. Moves output to build/clips/intro_01.mp4
+    5. Moves output to build/title.mp4
     6. Cleans up script file
 
     Returns:
-        Path to the rendered intro_01.mp4.
+        Path to the rendered title.mp4.
     """
     project_path = Path(project_path)
     config = load_config(project_path)
@@ -477,11 +477,11 @@ def generate_title(project_path: str | Path, reveal_style: str = "particle",
     font_dir = _FONT_DIR
     script = build_title_script(title, subtitle, reveal_style, duration, colors, font_dir)
 
-    clips_dir = project_path / "build" / "clips"
-    clips_dir.mkdir(parents=True, exist_ok=True)
-    media_dir = clips_dir / "media"
+    build_dir = project_path / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+    media_dir = build_dir / "_title_media"
 
-    script_path = clips_dir / "_scene_title.py"
+    script_path = build_dir / "_scene_title.py"
     script_path.write_text(script)
 
     fps = config["video"]["fps"]
@@ -502,7 +502,7 @@ def generate_title(project_path: str | Path, reveal_style: str = "particle",
         script_path.unlink(missing_ok=True)
         raise FileNotFoundError("Manim output not found for Scene_title")
 
-    final_path = clips_dir / "intro_01.mp4"
+    final_path = build_dir / "title.mp4"
     if final_path.exists():
         final_path.unlink()
     output_files[0].rename(final_path)
