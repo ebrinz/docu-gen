@@ -38,3 +38,9 @@ def test_duration_matches_clip_duration(project):
     base_dir = project / "build" / "base"
     assert _probe_duration(base_dir / "intro_01.mp4") == pytest.approx(2.5, abs=0.05)
     assert _probe_duration(base_dir / "intro_02.mp4") == pytest.approx(3.0, abs=0.05)
+
+
+def test_base_clips_registered_as_mcp_tool():
+    from docugen import server
+    tool_names = [t.name for t in server.mcp._tool_manager.list_tools()]
+    assert "base_clips" in tool_names

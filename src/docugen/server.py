@@ -11,6 +11,7 @@ from docugen.tools.render import render_all
 from docugen.tools.score import generate_score
 from docugen.tools.stitch import stitch_all
 from docugen.tools.title import generate_title
+from docugen.tools.base_clips import generate_base_clips
 from docugen.tools.viz_extract import viz_extract as _viz_extract
 from docugen.spot import spot_project
 
@@ -187,6 +188,20 @@ def title(project_path: str, title_text: str = "",
         reveal_style: Animation style.
     """
     return generate_title(project_path, title_text, subtitle_text, reveal_style)
+
+
+@mcp.tool()
+def base_clips(project_path: str) -> str:
+    """Generate silent black MP4 per clip at exact clip_duration.
+
+    Reads build/clips.json and emits build/base/<clip_id>.mp4 for every clip.
+    These base clips are the duration contract for composite; Manim renders
+    are overlayed onto them.
+
+    Args:
+        project_path: Path to project directory.
+    """
+    return generate_base_clips(project_path)
 
 
 @mcp.tool()
