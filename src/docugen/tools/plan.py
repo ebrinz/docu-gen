@@ -247,7 +247,3 @@ def generate_plan_via_openai(
     )
     plan_text = response.choices[0].message.content
     return plan_apply(project_path, plan_text)
-
-
-# Backward-compat alias — test_plan.py was written against the old name.
-generate_plan = generate_plan_via_openai
