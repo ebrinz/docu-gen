@@ -13,13 +13,16 @@ from docugen.tools.stitch import stitch_all
 from docugen.tools.title import generate_title
 from docugen.tools.base_clips import generate_base_clips
 from docugen.tools.storyboard import generate_storyboard_preview
+from docugen.tools.composite import composite_all
 from docugen.tools.viz_extract import viz_extract as _viz_extract
 from docugen.spot import spot_project
 
 mcp = FastMCP("docugen", instructions=(
     "Documentary generation pipeline. Use tools in order: "
-    "init -> plan_prepare -> plan_apply -> split -> narrate -> viz_extract -> "
-    "direct_prepare -> direct_apply -> spot -> render -> score -> stitch. "
+    "init -> plan_prepare -> plan_apply -> split -> narrate -> "
+    "base_clips -> storyboard_preview (review gate) -> "
+    "viz_extract -> direct_prepare -> direct_apply -> spot -> render -> "
+    "composite -> score -> stitch. "
     "plan_prepare gathers PDF text + creative direction and returns context; "
     "you (the MCP host) reason on it and call plan_apply with the plan JSON. "
     "Use title to generate a standalone title card. "
@@ -216,6 +219,19 @@ def storyboard_preview(project_path: str) -> str:
         project_path: Path to project directory.
     """
     return generate_storyboard_preview(project_path)
+
+
+@mcp.tool()
+def composite(project_path: str) -> str:
+    """Overlay Manim renders onto base clips, mux narration, force duration.
+
+    Reads build/base/<id>.mp4 + build/frames/<id>.mp4 + build/narration/<id>.wav,
+    writes build/clips/<id>.mp4 with duration = clip.timing.clip_duration.
+
+    Args:
+        project_path: Path to project directory.
+    """
+    return composite_all(project_path)
 
 
 @mcp.tool()

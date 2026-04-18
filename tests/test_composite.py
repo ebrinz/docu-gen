@@ -85,3 +85,9 @@ def test_composite_includes_narration_audio_when_wav_present(project):
     )
     lines = result.stdout.strip().split("\n")
     assert "audio" in lines, f"expected audio stream, got: {result.stdout}"
+
+
+def test_composite_registered_as_mcp_tool():
+    from docugen import server
+    tool_names = [t.name for t in server.mcp._tool_manager.list_tools()]
+    assert "composite" in tool_names
