@@ -30,11 +30,10 @@ def _composite_one(base: Path, manim: Path, narration: Path | None,
 
     if narration and narration.exists():
         inputs += ["-i", str(narration)]
-        maps = ["-map", "[v]", "-map", "2:a"]
     else:
         inputs += ["-f", "lavfi", "-i",
                    f"anullsrc=channel_layout=stereo:sample_rate=44100:duration={clip_duration}"]
-        maps = ["-map", "[v]", "-map", "2:a"]
+    maps = ["-map", "[v]", "-map", "2:a"]
 
     cmd = [
         "ffmpeg", "-y", *inputs,

@@ -69,3 +69,19 @@ def test_composite_raises_on_duration_mismatch_beyond_tolerance(project, monkeyp
 
     with pytest.raises(RuntimeError, match="duration mismatch"):
         composite_all(project)
+
+
+def test_composite_includes_narration_audio_when_wav_present(project):
+    """When a narration WAV exists, the output must carry its audio stream."""
+    composite_all(project)
+
+    out = project / "build" / "clips" / "intro_01.mp4"
+    # ffprobe the audio stream to confirm it's present and non-empty
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0",
+         "-show_entries", "stream=codec_type,duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(out)],
+        capture_output=True, text=True, check=True,
+    )
+    lines = result.stdout.strip().split("\n")
+    assert "audio" in lines, f"expected audio stream, got: {result.stdout}"
